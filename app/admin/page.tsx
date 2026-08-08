@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import axios from 'axios';
 
+// ⚠️ 請務必確認此處填寫的是您的「後端 API」網址，而不是前端網址
+const API_BASE_URL = 'https://您的後端網址.zeabur.app'; 
+
 export default function SuperAdminDashboard() {
   const [secret, setSecret] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -16,53 +19,60 @@ export default function SuperAdminDashboard() {
   const [selectedTenantId, setSelectedTenantId] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
 
-  // 1. 登入並獲取租戶名單
+  // 輔助錯誤處理函數，顯示最真實的錯誤
+  const handleError = (err: any, defaultMsg: string) => {
+    if (err.response && err.response.data && err.response.data.detail) {
+      setMessage(`❌ 錯誤: ${err.response.data.detail}`);
+    } else {
+      setMessage(`❌ ${defaultMsg}: ${err.message}`);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage('');
     try {
-      const res = await axios.get(`https://addash.zeabur.app/api/admin/tenants?secret=${secret}`);
+      const res = await axios.get(`${API_BASE_URL}/api/admin/tenants?secret=${secret}`);
       if (res.data.status === 'success') {
         setIsAuthenticated(true);
         setTenants(res.data.tenants);
       }
     } catch (err) {
-      setMessage('密碼錯誤或連線失敗！');
+      handleError(err, '密碼錯誤或無法連線至後端伺服器');
     }
     setLoading(false);
   };
 
-  // 2. 建立新客戶
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
+    setMessage('建立中...');
     try {
-      const res = await axios.post(`https://addash.zeabur.app/api/tenants?secret=${secret}`, {
+      const res = await axios.post(`${API_BASE_URL}/api/tenants?secret=${secret}`, {
         company_name: newCompanyName,
         contact_email: newContactEmail
       });
       setMessage(`✅ 建立成功！客戶 ID: ${res.data.tenant_id}`);
       setNewCompanyName('');
       setNewContactEmail('');
-      // 重新整理列表
       handleLogin({ preventDefault: () => {} } as React.FormEvent);
     } catch (err) {
-      setMessage('❌ 建立客戶失敗。');
+      handleError(err, '建立客戶失敗');
     }
   };
 
-  // 3. 新增使用者到既有客戶
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    setMessage('新增中...');
     try {
-      const res = await axios.post(`https://addash.zeabur.app/api/admin/users?secret=${secret}`, {
+      const res = await axios.post(`${API_BASE_URL}/api/admin/users?secret=${secret}`, {
         tenant_id: selectedTenantId,
         email: newUserEmail
       });
       setMessage(`✅ ${res.data.message}`);
       setNewUserEmail('');
     } catch (err) {
-      setMessage('❌ 新增使用者失敗（可能信箱已存在）。');
+      handleError(err, '新增使用者失敗');
     }
   };
 
@@ -108,7 +118,6 @@ export default function SuperAdminDashboard() {
         {message && <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg font-medium">{message}</div>}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* 左側：操作表單 */}
           <div className="space-y-8">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
               <h2 className="text-xl font-bold text-gray-800 mb-4">1. 建立新客戶 (Tenant)</h2>
@@ -134,7 +143,6 @@ export default function SuperAdminDashboard() {
             </div>
           </div>
 
-          {/* 右側：客戶清單與授權連結 */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <h2 className="text-xl font-bold text-gray-800 mb-4">目前的客戶名單與授權</h2>
             <div className="overflow-y-auto max-h-[600px]">
@@ -148,11 +156,11 @@ export default function SuperAdminDashboard() {
                     <div className="flex gap-2">
                       <input 
                         readOnly 
-                        value={`https://addash.zeabur.app/api/auth/google/login?tenant_id=${tenant.id}&secret=${secret}`}
+                        value={`${API_BASE_URL}/api/auth/google/login?tenant_id=${tenant.id}&secret=${secret}`}
                         className="text-xs w-full px-2 py-1 border border-gray-300 rounded bg-white text-gray-600" 
                       />
                       <button 
-                        onClick={() => navigator.clipboard.writeText(`https://addash.zeabur.app/api/auth/google/login?tenant_id=${tenant.id}&secret=${secret}`)}
+                        onClick={() => navigator.clipboard.writeText(`${API_BASE_URL}/api/auth/google/login?tenant_id=${tenant.id}&secret=${secret}`)}
                         className="bg-gray-800 text-white text-xs px-3 py-1 rounded hover:bg-gray-900"
                       >
                         複製
