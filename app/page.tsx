@@ -47,8 +47,8 @@ export default function App() {
     setLoginLoading(false);
   };
 
-  // 抓取儀表板數據
-  const fetchDashboardData = async (id: str) => {
+  // 抓取儀表板數據 (🔧 已在此處修正 TypeScript 的 string 型別)
+  const fetchDashboardData = async (id: string) => {
     setDataLoading(true);
     setDataError('');
     try {
