@@ -5,7 +5,7 @@ import axios from 'axios';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 // ⚠️ 請填寫您的「後端 API」網址
-const API_BASE_URL = 'https://您的後端網址.zeabur.app';
+const API_BASE_URL = 'https://addash.zeabur.app';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);

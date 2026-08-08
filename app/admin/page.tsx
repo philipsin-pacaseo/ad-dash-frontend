@@ -4,7 +4,7 @@ import { useState } from 'react';
 import axios from 'axios';
 
 // ⚠️ 請填寫您的「後端 API」網址
-const API_BASE_URL = 'https://您的後端網址.zeabur.app'; 
+const API_BASE_URL = 'https://addash.zeabur.app'; 
 
 export default function SuperAdminDashboard() {
   const [secret, setSecret] = useState('');
