@@ -50,15 +50,15 @@ export default function DashboardPage() {
 
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
-useEffect(() => {
+  useEffect(() => {
     const tenantId = sessionStorage.getItem("tenant_id");
     const storedCompany = sessionStorage.getItem("company_name");
 
-    // 【修復核心 1】：在跳轉前將 loading 關閉，並使用 replace 防止上一頁死結
+    // 【防護 1】：確認是否有登入憑證，若無則踢回首頁
     if (!tenantId) {
       setLoading(false);
       alert("登入憑證已失效，請重新登入。");
-      router.replace("/"); 
+      router.replace("/");
       return;
     }
 
@@ -66,7 +66,7 @@ useEffect(() => {
 
     const fetchDashboardData = async () => {
       try {
-        // 【修復核心 2】：加入 15 秒超時防護，防止後端 Zeabur 休眠或連線池滿載導致無限 Loading
+        // 【防護 2】：加入 15 秒超時防護，防止後端 Zeabur 無回應導致無限 Loading
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000); 
 
@@ -96,34 +96,12 @@ useEffect(() => {
     fetchDashboardData();
   }, [router, BACKEND_URL]);
 
-    if (storedCompany) setCompanyName(storedCompany);
-
-    // 向後端 API 獲取儀表板數據
-    const fetchDashboardData = async () => {
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/dashboard/summary?tenant_id=${tenantId}`);
-        const result = await res.json();
-
-        if (!res.ok) {
-          throw new Error(result.detail || "無法載入儀表板數據");
-        }
-
-        setData(result);
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDashboardData();
-  }, [router, BACKEND_URL]);
-
   const handleLogout = () => {
     sessionStorage.clear();
     router.push("/");
   };
 
+  // 畫面渲染：Loading 狀態
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -132,6 +110,7 @@ useEffect(() => {
     );
   }
 
+  // 畫面渲染：Error 狀態
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -146,6 +125,7 @@ useEffect(() => {
     );
   }
 
+  // 畫面渲染：成功顯示 Dashboard
   return (
     <div className="min-h-screen bg-gray-100">
       <header className="bg-white shadow-sm px-8 py-4 flex justify-between items-center">
