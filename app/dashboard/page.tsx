@@ -6,7 +6,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 
-// 🌟 Google Ads 類型字典 (翻譯 API 回傳的原始數字)
+// 🌟 Google Ads 類型字典
 const AD_TYPE_MAP: Record<string, string> = {
   "2": "Search",
   "3": "Display",
@@ -23,7 +23,7 @@ const AD_TYPE_MAP: Record<string, string> = {
   "14": "Demand Gen"
 };
 
-// 🌟 Google Ads 出價策略 (Objective) 字典
+// 🌟 Google Ads 出價策略字典
 const AD_OBJ_MAP: Record<string, string> = {
   "2": "Commission",
   "3": "Target CPA (Legacy)",
@@ -42,7 +42,6 @@ const AD_OBJ_MAP: Record<string, string> = {
   "16": "Max Clicks"
 };
 
-// 宣告後端回傳的資料格式
 interface DashboardData {
   metrics: {
     MTD_spend: number;
@@ -74,7 +73,6 @@ interface DashboardData {
     conversions: number; conversion_value: number; roas: number;
   }>;
   ga4_channels?: Array<{ channel: string; sessions: number }>;
-  // 🌟 V6 升級：接收 page_title 與 visits
   ga4_top_pages?: Array<{ page_title: string; visits: number; bounce_rate: number }>;
   gsc_keywords?: Array<{ keyword: string; clicks: number; impressions: number; ctr: number; position: number }>;
 }
@@ -162,6 +160,7 @@ export default function DashboardPage() {
     fetchDashboardData();
   };
 
+  // 🛡️ 防禦性渲染：載入中且無資料時
   if (loading && !data) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -169,6 +168,25 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  // 🛡️ 防禦性渲染：發生致命錯誤且無舊資料可顯示時
+  if (error && !data) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 flex-col space-y-4">
+        <div className="p-6 bg-red-50 text-red-700 rounded-lg shadow-sm border border-red-200 text-center max-w-md">
+          <h2 className="text-xl font-bold mb-2">系統連線異常</h2>
+          <p>{error}</p>
+          <button onClick={() => window.location.reload()} className="mt-4 px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-medium transition">
+            強制重新整理
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 🛡️ 安全的變數提取 (Null-Safety)
+  const momGrowth = data?.metrics?.MoM_growth_percent || 0;
+  const isMomPositive = momGrowth > 0;
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -179,18 +197,19 @@ export default function DashboardPage() {
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent text-sm font-medium outline-none text-gray-700"/>
           <span className="text-gray-400">至</span>
           <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent text-sm font-medium outline-none text-gray-700"/>
-          <button onClick={applyDateFilter} className="ml-2 bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">套用</button>
+          <button onClick={applyDateFilter} className="ml-2 bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition">套用</button>
         </div>
 
         <div className="flex items-center gap-4">
           <span className="text-sm text-gray-600 font-medium">租戶：{companyName}</span>
-          <button onClick={handleLogout} className="text-sm px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">安全登出</button>
+          <button onClick={handleLogout} className="text-sm px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition">安全登出</button>
         </div>
       </header>
 
-      {error && (
-        <div className="bg-red-100 text-red-700 p-4 m-8 rounded-md text-center">
-          {error} <button onClick={() => fetchDashboardData()} className="underline ml-2">重試</button>
+      {error && data && (
+        <div className="bg-yellow-50 text-yellow-800 p-3 m-8 rounded-md text-sm font-medium border border-yellow-200 flex justify-between items-center">
+          <span>⚠️ 數據更新延遲：{error} (目前顯示為快取資料)</span>
+          <button onClick={() => fetchDashboardData()} className="underline text-yellow-900 hover:text-black">重試</button>
         </div>
       )}
 
@@ -201,9 +220,9 @@ export default function DashboardPage() {
             <h3 className="text-sm font-medium text-gray-500 mb-1">廣告總花費 (區間 / YTD)</h3>
             <p className="text-3xl font-bold text-gray-800">${data?.metrics?.MTD_spend?.toLocaleString() || 0}</p>
             <p className="text-xs text-gray-400 mt-1">YTD: ${data?.metrics?.YTD_spend?.toLocaleString() || 0}</p>
-            <p className={`text-sm mt-2 font-medium ${data?.metrics?.MoM_growth_percent! > 0 ? "text-red-500" : "text-green-500"}`}>
-              {data?.metrics?.MoM_growth_percent! > 0 ? "↑" : "↓"} {Math.abs(data?.metrics?.MoM_growth_percent || 0)}% MoM
-              <span className="ml-2 text-gray-400 font-normal">/ {data?.metrics?.YoY_growth_percent}% YoY</span>
+            <p className={`text-sm mt-2 font-medium ${isMomPositive ? "text-red-500" : "text-green-500"}`}>
+              {isMomPositive ? "↑" : "↓"} {Math.abs(momGrowth)}% MoM
+              <span className="ml-2 text-gray-400 font-normal">/ {data?.metrics?.YoY_growth_percent || 0}% YoY</span>
             </p>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -226,7 +245,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative">
-          {loading && <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10 font-bold text-blue-500">更新圖表中...</div>}
+          {loading && <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10 font-bold text-blue-600">圖表更新中...</div>}
           <h2 className="text-lg font-bold text-gray-800 mb-4">廣告花費趨勢圖</h2>
           <div className="w-full h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -247,7 +266,9 @@ export default function DashboardPage() {
         <div className="space-y-6">
           <h2 className="text-2xl font-bold text-gray-800">各平台深度洞察 (Deep Dive)</h2>
           
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+          {/* Google Ads 詳細成效 */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto relative">
+            {loading && <div className="absolute inset-0 bg-white/50 z-10"></div>}
             <h3 className="text-lg font-bold text-blue-600 mb-4">Google Ads 廣告活動成效</h3>
             <table className="min-w-full text-sm text-left">
               <thead className="bg-gray-50 text-gray-600 font-medium border-b">
@@ -291,8 +312,10 @@ export default function DashboardPage() {
             </table>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* 🌟 V6 升級：GSC Top 20 搜尋關鍵字 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
+            {loading && <div className="absolute inset-0 bg-white/50 z-10"></div>}
+            
+            {/* GSC Top 20 搜尋關鍵字 */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
               <h3 className="text-lg font-bold text-emerald-600 mb-4">GSC: Top 20 搜尋關鍵字</h3>
               <table className="min-w-full text-sm text-left">
@@ -308,7 +331,7 @@ export default function DashboardPage() {
                 <tbody>
                   {data?.gsc_keywords?.length ? data.gsc_keywords.map((k, i) => (
                     <tr key={i} className="border-b hover:bg-gray-50">
-                      <td className="py-3 px-4">{k.keyword}</td>
+                      <td className="py-3 px-4 font-medium">{k.keyword}</td>
                       <td className="py-3 px-4 text-right">{k.clicks}</td>
                       <td className="py-3 px-4 text-right">{k.impressions}</td>
                       <td className="py-3 px-4 text-right">{k.ctr}%</td>
@@ -320,6 +343,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="space-y-6">
+              {/* GA4 Channels */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
                 <h3 className="text-lg font-bold text-orange-500 mb-4">GA4: Sessions by Channel</h3>
                 {data?.ga4_channels?.length ? (
@@ -333,7 +357,7 @@ export default function DashboardPage() {
                     <tbody>
                       {data.ga4_channels.map((c, i) => (
                         <tr key={i} className="border-b hover:bg-gray-50">
-                          <td className="py-2 px-4">{c.channel}</td>
+                          <td className="py-2 px-4 font-medium">{c.channel}</td>
                           <td className="py-2 px-4 text-right">{c.sessions}</td>
                         </tr>
                       ))}
@@ -342,7 +366,7 @@ export default function DashboardPage() {
                 ) : <div className="py-4 text-center text-sm text-gray-400">目前沒有資料，或等待載入中...</div>}
               </div>
               
-              {/* 🌟 V6 升級：GA4 Top 10 網頁標題與訪問數 */}
+              {/* GA4 Top 10 網頁標題與跳出率 */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
                 <h3 className="text-lg font-bold text-orange-500 mb-4">GA4: Top 10 網頁標題與跳出率</h3>
                 {data?.ga4_top_pages?.length ? (
@@ -357,7 +381,7 @@ export default function DashboardPage() {
                     <tbody>
                       {data.ga4_top_pages.map((p, i) => (
                         <tr key={i} className="border-b hover:bg-gray-50">
-                          <td className="py-2 px-4 truncate max-w-[300px]" title={p.page_title}>{p.page_title}</td>
+                          <td className="py-2 px-4 truncate max-w-[300px] font-medium" title={p.page_title}>{p.page_title}</td>
                           <td className="py-2 px-4 text-right">{p.visits}</td>
                           <td className="py-2 px-4 text-right">{p.bounce_rate}%</td>
                         </tr>
