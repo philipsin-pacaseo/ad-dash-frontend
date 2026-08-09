@@ -64,40 +64,7 @@ export default function AdminPage() {
   };
 
   // ==========================================
-  // 核心功能 2：OAuth 平台授權跳轉
-  // ==========================================
-  const handleOAuthLogin = (platform: "google" | "meta") => {
-    if (!secret) return alert("請先輸入超級管理員密鑰");
-    if (!tenantIdForAuth) return alert("請輸入要綁定的 Tenant ID");
-    const authUrl = `${BACKEND_URL}/api/auth/${platform}/login?tenant_id=${encodeURIComponent(tenantIdForAuth)}&secret=${encodeURIComponent(secret)}`;
-    window.location.href = authUrl;
-  };
-
-  // ==========================================
-  // 核心功能 3：綁定子帳戶並初次抓取數據
-  // ==========================================
-  const handleBindAndFetch = async (platform: string, paramName: string, paramValue: string) => {
-    if (!bindTenantId) return alert("請先輸入目標商戶 (Tenant ID)");
-    if (!paramValue) return alert(`請輸入對應的 ${paramName}`);
-    setLoading(true); setMessage(null);
-    
-    try {
-      let endpoint = `${BACKEND_URL}/api/data/fetch-${platform}?tenant_id=${encodeURIComponent(bindTenantId)}&${paramName}=${encodeURIComponent(paramValue)}`;
-      
-      const res = await fetch(endpoint, { method: "POST" });
-      const data = await res.json();
-      
-      if (!res.ok) throw new Error(data.detail || `${platform} 綁定/抓取失敗`);
-      setMessage({ text: `[${platform}] 綁定成功！${data.message}`, type: "success" });
-    } catch (err: any) {
-      setMessage({ text: err.message, type: "error" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ==========================================
-  // 核心功能 4：上帝視角 (獲取商戶列表與模擬登入)
+  // 核心功能 2：上帝視角 (獲取商戶列表與模擬登入)
   // ==========================================
   const fetchAllTenants = async () => {
     if (!secret) return alert("請先輸入超級管理員密鑰");
@@ -115,13 +82,84 @@ export default function AdminPage() {
     }
   };
 
-  // 上帝模式：模擬商戶身分並開啟儀表板
   const handleGodModeView = (tenantId: string, companyName: string) => {
-    // 寫入 SessionStorage 模擬登入憑證
     sessionStorage.setItem("tenant_id", tenantId);
     sessionStorage.setItem("company_name", `(上帝模式) ${companyName}`);
-    // 開啟新分頁進入儀表板，不影響當前的 Admin 頁面
     window.open("/dashboard", "_blank");
+  };
+
+  // ==========================================
+  // 核心功能 3：商戶下拉選單連動 (自動回填帳號)
+  // ==========================================
+  const handleTenantChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const tId = e.target.value;
+    setBindTenantId(tId);
+    setTenantIdForAuth(tId); // 同步給 OAuth 區塊
+
+    // 先清空現有欄位，避免舊資料殘留
+    setGoogleAdsId(""); setGa4Id(""); setGscUrl(""); setMetaId("");
+
+    if (!tId || !secret) return;
+
+    setLoading(true);
+    try {
+      // 呼叫後端 API 查詢該商戶已綁定的帳號
+      const res = await fetch(`${BACKEND_URL}/api/admin/integrations/${tId}?secret=${encodeURIComponent(secret)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === "success" && data.integrations) {
+          setGoogleAdsId(data.integrations.google_ads || "");
+          setGa4Id(data.integrations.ga4 || "");
+          setGscUrl(data.integrations.gsc || "");
+          setMetaId(data.integrations.meta_ads || "");
+        }
+      }
+    } catch (error) {
+      console.error("讀取綁定資料失敗:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ==========================================
+  // 核心功能 4：OAuth 平台授權跳轉
+  // ==========================================
+  const handleOAuthLogin = (platform: "google" | "meta") => {
+    if (!secret) return alert("請先輸入超級管理員密鑰");
+    if (!tenantIdForAuth) return alert("請先從下拉選單選擇目標商戶");
+    const authUrl = `${BACKEND_URL}/api/auth/${platform}/login?tenant_id=${encodeURIComponent(tenantIdForAuth)}&secret=${encodeURIComponent(secret)}`;
+    window.location.href = authUrl;
+  };
+
+  // ==========================================
+  // 核心功能 5：綁定子帳戶並初次抓取數據 (含 GSC 防呆)
+  // ==========================================
+  const handleBindAndFetch = async (platform: string, paramName: string, paramValue: string) => {
+    if (!bindTenantId) return alert("請先選擇目標商戶");
+    if (!paramValue) return alert(`請輸入對應的 ${paramName}`);
+    setLoading(true); setMessage(null);
+    
+    try {
+      // 💡 智能格式化：清除前後空白，自動處理 GSC 的前綴
+      let formattedValue = paramValue.trim();
+      if (platform === 'gsc') {
+        if (!formattedValue.startsWith('http') && !formattedValue.startsWith('sc-domain:')) {
+          formattedValue = `sc-domain:${formattedValue}`;
+        }
+      }
+
+      let endpoint = `${BACKEND_URL}/api/data/fetch-${platform}?tenant_id=${encodeURIComponent(bindTenantId)}&${paramName}=${encodeURIComponent(formattedValue)}`;
+      
+      const res = await fetch(endpoint, { method: "POST" });
+      const data = await res.json();
+      
+      if (!res.ok) throw new Error(data.detail || `${platform} 綁定/抓取失敗`);
+      setMessage({ text: `[${platform}] 綁定成功！${data.message}`, type: "success" });
+    } catch (err: any) {
+      setMessage({ text: err.message, type: "error" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -129,16 +167,23 @@ export default function AdminPage() {
       <div className="max-w-5xl mx-auto space-y-6">
         <h1 className="text-3xl font-bold text-gray-800">超級管理員控制台 (V4 旗艦版)</h1>
 
-        {/* 密鑰輸入區 (最重要) */}
-        <div className="bg-white p-6 rounded-lg shadow border-t-4 border-gray-800 sticky top-4 z-10">
-          <label className="block text-sm font-bold text-gray-700 mb-2">🔑 超級管理員密鑰 (SUPER_ADMIN_SECRET)</label>
-          <input
-            type="password"
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500 bg-gray-50"
-            value={secret}
-            onChange={(e) => setSecret(e.target.value)}
-            placeholder="請輸入密鑰以解鎖下方所有操作..."
-          />
+        {/* 密鑰輸入區 */}
+        <div className="bg-white p-6 rounded-lg shadow border-t-4 border-gray-800 sticky top-4 z-10 flex gap-4">
+          <div className="flex-1">
+            <label className="block text-sm font-bold text-gray-700 mb-2">🔑 超級管理員密鑰 (SUPER_ADMIN_SECRET)</label>
+            <input
+              type="password"
+              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500 bg-gray-50"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              placeholder="請輸入密鑰以解鎖下方所有操作..."
+            />
+          </div>
+          <div className="flex items-end">
+            <button onClick={fetchAllTenants} disabled={loading || !secret} className="px-6 py-2 h-[42px] bg-gray-800 text-white font-medium rounded hover:bg-gray-700 disabled:bg-gray-400">
+              載入商戶列表
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -162,37 +207,61 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* 區塊 3 & 4：OAuth 與 子帳戶綁定 */}
+          {/* 區塊 3 & 4：下拉選單、OAuth 與 子帳戶綁定 */}
           <div className="space-y-6">
-            <div className="bg-white p-6 rounded-lg shadow border-l-4 border-indigo-500">
-              <h2 className="text-xl font-semibold mb-4">3. 主帳戶 OAuth 授權綁定</h2>
-              <input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-md mb-4 text-sm" placeholder="目標商戶 ID (Tenant ID)" value={tenantIdForAuth} onChange={(e) => setTenantIdForAuth(e.target.value)} />
-              <div className="flex gap-4">
-                <button onClick={() => handleOAuthLogin("google")} className="flex-1 py-2 bg-white border border-gray-300 text-gray-700 font-medium rounded hover:bg-gray-50 text-sm">連結 Google 授權</button>
-                <button onClick={() => handleOAuthLogin("meta")} className="flex-1 py-2 bg-[#1877F2] text-white font-medium rounded hover:bg-[#166FE5] text-sm">連結 Meta 授權</button>
-              </div>
-            </div>
-
+            
+            {/* 統一的商戶選擇器 */}
             <div className="bg-white p-6 rounded-lg shadow border-l-4 border-emerald-500">
-              <h2 className="text-xl font-semibold mb-4">4. 子帳戶綁定 & 抓取數據</h2>
-              <input type="text" className="w-full px-4 py-2 border border-emerald-300 rounded-md mb-4 text-sm bg-emerald-50" placeholder="目標商戶 ID (Tenant ID)" value={bindTenantId} onChange={(e) => setBindTenantId(e.target.value)} />
+              <h2 className="text-xl font-semibold mb-4">3 & 4. 平台授權與子帳戶綁定</h2>
               
-              <div className="space-y-3">
+              <label className="block text-sm font-bold text-gray-700 mb-2">請先選擇目標商戶：</label>
+              <select
+                className="w-full px-4 py-2 border border-emerald-300 rounded-md mb-4 text-sm bg-emerald-50 cursor-pointer font-medium"
+                value={bindTenantId}
+                onChange={handleTenantChange}
+              >
+                <option value="">-- 請選擇目標商戶 --</option>
+                {tenants.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.company_name} ({t.contact_email})
+                  </option>
+                ))}
+              </select>
+
+              {tenants.length === 0 && (
+                <p className="text-xs text-red-500 mb-4 font-medium">
+                  💡 請先在頂部輸入密鑰並點擊【載入商戶列表】，此選單才會出現選項。
+                </p>
+              )}
+
+              {/* OAuth 按鈕 */}
+              <div className="flex gap-4 mb-6">
+                <button onClick={() => handleOAuthLogin("google")} disabled={!bindTenantId} className="flex-1 py-2 bg-white border border-gray-300 text-gray-700 font-medium rounded hover:bg-gray-50 text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                  🔗 Google 授權
+                </button>
+                <button onClick={() => handleOAuthLogin("meta")} disabled={!bindTenantId} className="flex-1 py-2 bg-[#1877F2] text-white font-medium rounded hover:bg-[#166FE5] text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                  🔗 Meta 授權
+                </button>
+              </div>
+              
+              {/* 子帳戶綁定 */}
+              <div className="space-y-3 pt-4 border-t border-gray-100">
+                <label className="block text-sm font-bold text-gray-700 mb-2">輸入子帳號 ID 並抓取數據：</label>
                 <div className="flex gap-2">
-                  <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm" placeholder="Google Ads Customer ID" value={googleAdsId} onChange={(e) => setGoogleAdsId(e.target.value)} />
-                  <button onClick={() => handleBindAndFetch('google-ads', 'google_customer_id', googleAdsId)} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700">綁定</button>
+                  <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="Google Ads Customer ID" value={googleAdsId} onChange={(e) => setGoogleAdsId(e.target.value)} disabled={!bindTenantId} />
+                  <button onClick={() => handleBindAndFetch('google-ads', 'google_customer_id', googleAdsId)} disabled={!bindTenantId} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">綁定</button>
                 </div>
                 <div className="flex gap-2">
-                  <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm" placeholder="GA4 Property ID" value={ga4Id} onChange={(e) => setGa4Id(e.target.value)} />
-                  <button onClick={() => handleBindAndFetch('ga4', 'ga4_property_id', ga4Id)} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700">綁定</button>
+                  <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="GA4 Property ID" value={ga4Id} onChange={(e) => setGa4Id(e.target.value)} disabled={!bindTenantId} />
+                  <button onClick={() => handleBindAndFetch('ga4', 'ga4_property_id', ga4Id)} disabled={!bindTenantId} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">綁定</button>
                 </div>
                 <div className="flex gap-2">
-                  <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm" placeholder="GSC 網站網址" value={gscUrl} onChange={(e) => setGscUrl(e.target.value)} />
-                  <button onClick={() => handleBindAndFetch('gsc', 'gsc_site_url', gscUrl)} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700">綁定</button>
+                  <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="GSC 網域 (例如: outdooride.com)" value={gscUrl} onChange={(e) => setGscUrl(e.target.value)} disabled={!bindTenantId} />
+                  <button onClick={() => handleBindAndFetch('gsc', 'gsc_site_url', gscUrl)} disabled={!bindTenantId} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">綁定</button>
                 </div>
                 <div className="flex gap-2">
-                  <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm" placeholder="Meta Ad Account ID" value={metaId} onChange={(e) => setMetaId(e.target.value)} />
-                  <button onClick={() => handleBindAndFetch('meta-ads', 'meta_ad_account_id', metaId)} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700">綁定</button>
+                  <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="Meta Ad Account ID" value={metaId} onChange={(e) => setMetaId(e.target.value)} disabled={!bindTenantId} />
+                  <button onClick={() => handleBindAndFetch('meta-ads', 'meta_ad_account_id', metaId)} disabled={!bindTenantId} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">綁定</button>
                 </div>
               </div>
             </div>
@@ -208,9 +277,6 @@ export default function AdminPage() {
               <h2 className="text-2xl font-bold text-gray-800">5. 上帝視角 (商戶管理)</h2>
               <p className="text-sm text-gray-500 mt-1">一覽所有商戶，並可一鍵無密碼登入目標商戶的儀表板進行除錯與查看。</p>
             </div>
-            <button onClick={fetchAllTenants} disabled={loading} className="px-6 py-2 bg-purple-600 text-white font-medium rounded hover:bg-purple-700 disabled:bg-gray-400">
-              載入 / 刷新商戶列表
-            </button>
           </div>
 
           {tenants.length > 0 ? (
@@ -245,7 +311,7 @@ export default function AdminPage() {
             </div>
           ) : (
             <div className="text-center py-10 bg-gray-50 rounded border border-dashed border-gray-300 text-gray-500">
-              點擊右上角按鈕載入資料庫中的商戶列表
+              點擊頂部按鈕載入商戶列表
             </div>
           )}
         </div>
