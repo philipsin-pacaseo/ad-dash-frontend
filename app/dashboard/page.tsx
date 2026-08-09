@@ -50,16 +50,51 @@ export default function DashboardPage() {
 
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
-  useEffect(() => {
-    // 驗證使用者是否已登入
+useEffect(() => {
     const tenantId = sessionStorage.getItem("tenant_id");
     const storedCompany = sessionStorage.getItem("company_name");
 
+    // 【修復核心 1】：在跳轉前將 loading 關閉，並使用 replace 防止上一頁死結
     if (!tenantId) {
-      alert("請先登入系統");
-      router.push("/");
+      setLoading(false);
+      alert("登入憑證已失效，請重新登入。");
+      router.replace("/"); 
       return;
     }
+
+    if (storedCompany) setCompanyName(storedCompany);
+
+    const fetchDashboardData = async () => {
+      try {
+        // 【修復核心 2】：加入 15 秒超時防護，防止後端 Zeabur 休眠或連線池滿載導致無限 Loading
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); 
+
+        const res = await fetch(`${BACKEND_URL}/api/dashboard/summary?tenant_id=${tenantId}`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const result = await res.json();
+
+        if (!res.ok) {
+          throw new Error(result.detail || "無法載入儀表板數據");
+        }
+
+        setData(result);
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          setError("伺服器連線逾時 (Timeout)。請檢查 Zeabur 後端是否正常運行。");
+        } else {
+          setError(err.message || "連線發生未知的錯誤");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [router, BACKEND_URL]);
 
     if (storedCompany) setCompanyName(storedCompany);
 
