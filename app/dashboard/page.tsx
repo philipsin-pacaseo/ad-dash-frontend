@@ -68,14 +68,14 @@ interface DashboardData {
     Meta: number;
     Total: number;
   }>;
-  // V5 深度表格數據
   google_ads_details?: Array<{
     campaign_name: string; type: string; objective: string;
     impressions: number; clicks: number; cost: number;
     conversions: number; conversion_value: number; roas: number;
   }>;
   ga4_channels?: Array<{ channel: string; sessions: number }>;
-  ga4_top_pages?: Array<{ page_path: string; views: number; bounce_rate: number }>;
+  // 🌟 V6 升級：接收 page_title 與 visits
+  ga4_top_pages?: Array<{ page_title: string; visits: number; bounce_rate: number }>;
   gsc_keywords?: Array<{ keyword: string; clicks: number; impressions: number; ctr: number; position: number }>;
 }
 
@@ -86,13 +86,11 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState("");
 
-  // Date Picker 狀態管理
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
-  // 初始化預設日期 (近 30 天)
   useEffect(() => {
     const end = new Date();
     const start = new Date();
@@ -143,7 +141,6 @@ export default function DashboardPage() {
     }
   };
 
-  // 初次載入與驗證
   useEffect(() => {
     const storedCompany = sessionStorage.getItem("company_name");
     if (storedCompany) setCompanyName(storedCompany);
@@ -178,7 +175,6 @@ export default function DashboardPage() {
       <header className="bg-white shadow-sm px-8 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
         <h1 className="text-2xl font-bold text-gray-800">Ad-Dash 全通路數據中心</h1>
         
-        {/* 日期選擇器 UI */}
         <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-md border border-gray-200">
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent text-sm font-medium outline-none text-gray-700"/>
           <span className="text-gray-400">至</span>
@@ -200,7 +196,6 @@ export default function DashboardPage() {
 
       <main className="p-8 max-w-7xl mx-auto space-y-8">
         
-        {/* 頂部：核心比對指標 (MTD, YTD, YoY, MoM) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-500 mb-1">廣告總花費 (區間 / YTD)</h3>
@@ -230,7 +225,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 趨勢圖 */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative">
           {loading && <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10 font-bold text-blue-500">更新圖表中...</div>}
           <h2 className="text-lg font-bold text-gray-800 mb-4">廣告花費趨勢圖</h2>
@@ -250,11 +244,9 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* V5 深度洞察資料表 */}
         <div className="space-y-6">
           <h2 className="text-2xl font-bold text-gray-800">各平台深度洞察 (Deep Dive)</h2>
           
-          {/* Google Ads 詳細成效 */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
             <h3 className="text-lg font-bold text-blue-600 mb-4">Google Ads 廣告活動成效</h3>
             <table className="min-w-full text-sm text-left">
@@ -300,9 +292,9 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* GSC Top 10 Keywords */}
+            {/* 🌟 V6 升級：GSC Top 20 搜尋關鍵字 */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-              <h3 className="text-lg font-bold text-emerald-600 mb-4">GSC: Top 10 搜尋關鍵字</h3>
+              <h3 className="text-lg font-bold text-emerald-600 mb-4">GSC: Top 20 搜尋關鍵字</h3>
               <table className="min-w-full text-sm text-left">
                 <thead className="bg-gray-50 text-gray-600 border-b">
                   <tr>
@@ -327,7 +319,6 @@ export default function DashboardPage() {
               </table>
             </div>
 
-            {/* GA4 Channels & Pages */}
             <div className="space-y-6">
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
                 <h3 className="text-lg font-bold text-orange-500 mb-4">GA4: Sessions by Channel</h3>
@@ -350,22 +341,24 @@ export default function DashboardPage() {
                   </table>
                 ) : <div className="py-4 text-center text-sm text-gray-400">目前沒有資料，或等待載入中...</div>}
               </div>
+              
+              {/* 🌟 V6 升級：GA4 Top 10 網頁標題與訪問數 */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-                <h3 className="text-lg font-bold text-orange-500 mb-4">GA4: Top 10 網頁與跳出率</h3>
+                <h3 className="text-lg font-bold text-orange-500 mb-4">GA4: Top 10 網頁標題與跳出率</h3>
                 {data?.ga4_top_pages?.length ? (
                   <table className="min-w-full text-sm text-left">
                     <thead className="bg-gray-50 text-gray-600 border-b">
                       <tr>
-                        <th className="py-2 px-4">Page Path</th>
-                        <th className="py-2 px-4 text-right">Views</th>
+                        <th className="py-2 px-4">Page Title</th>
+                        <th className="py-2 px-4 text-right">Visits (Sessions)</th>
                         <th className="py-2 px-4 text-right">Bounce Rate</th>
                       </tr>
                     </thead>
                     <tbody>
                       {data.ga4_top_pages.map((p, i) => (
                         <tr key={i} className="border-b hover:bg-gray-50">
-                          <td className="py-2 px-4 truncate max-w-[200px]" title={p.page_path}>{p.page_path}</td>
-                          <td className="py-2 px-4 text-right">{p.views}</td>
+                          <td className="py-2 px-4 truncate max-w-[300px]" title={p.page_title}>{p.page_title}</td>
+                          <td className="py-2 px-4 text-right">{p.visits}</td>
                           <td className="py-2 px-4 text-right">{p.bounce_rate}%</td>
                         </tr>
                       ))}
