@@ -6,7 +6,43 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 
-// 🌟 升級版資料格式：加入了未來後端會傳送的細部陣列結構
+// 🌟 Google Ads 類型字典 (翻譯 API 回傳的原始數字)
+const AD_TYPE_MAP: Record<string, string> = {
+  "2": "Search",
+  "3": "Display",
+  "4": "Shopping",
+  "5": "Hotel",
+  "6": "Video",
+  "7": "Multi-Channel",
+  "8": "Local",
+  "9": "Smart",
+  "10": "Performance Max",
+  "11": "Local Services",
+  "12": "Discovery",
+  "13": "Travel",
+  "14": "Demand Gen"
+};
+
+// 🌟 Google Ads 出價策略 (Objective) 字典
+const AD_OBJ_MAP: Record<string, string> = {
+  "2": "Commission",
+  "3": "Target CPA (Legacy)",
+  "4": "Manual CPC",
+  "5": "Manual CPM",
+  "6": "Manual CPV",
+  "7": "Max Conversions",
+  "8": "Max Conv. Value",
+  "9": "Page One Promoted",
+  "10": "Percent CPA",
+  "11": "Target CPA",
+  "12": "Target CPM",
+  "13": "Target Impr. Share",
+  "14": "Target Outrank Share",
+  "15": "Target ROAS",
+  "16": "Max Clicks"
+};
+
+// 宣告後端回傳的資料格式
 interface DashboardData {
   metrics: {
     MTD_spend: number;
@@ -32,7 +68,7 @@ interface DashboardData {
     Meta: number;
     Total: number;
   }>;
-  // 以下為 V5 預備欄位：細部表格數據
+  // V5 深度表格數據
   google_ads_details?: Array<{
     campaign_name: string; type: string; objective: string;
     impressions: number; clicks: number; cost: number;
@@ -50,7 +86,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState("");
 
-  // 🌟 新增：Date Picker 狀態管理
+  // Date Picker 狀態管理
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -81,7 +117,6 @@ export default function DashboardPage() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000); 
 
-      // 將日期參數加上 API 請求中
       const queryParams = new URLSearchParams({
         tenant_id: tenantId,
         start_date: forceStart || startDate,
@@ -113,7 +148,6 @@ export default function DashboardPage() {
     const storedCompany = sessionStorage.getItem("company_name");
     if (storedCompany) setCompanyName(storedCompany);
     
-    // 確保日期有值才去抓資料
     if (startDate && endDate) {
       fetchDashboardData(startDate, endDate);
     }
@@ -144,7 +178,7 @@ export default function DashboardPage() {
       <header className="bg-white shadow-sm px-8 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
         <h1 className="text-2xl font-bold text-gray-800">Ad-Dash 全通路數據中心</h1>
         
-        {/* 🌟 日期選擇器 UI */}
+        {/* 日期選擇器 UI */}
         <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-md border border-gray-200">
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent text-sm font-medium outline-none text-gray-700"/>
           <span className="text-gray-400">至</span>
@@ -169,7 +203,7 @@ export default function DashboardPage() {
         {/* 頂部：核心比對指標 (MTD, YTD, YoY, MoM) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <h3 className="text-sm font-medium text-gray-500 mb-1">廣告總花費 (MTD / YTD)</h3>
+            <h3 className="text-sm font-medium text-gray-500 mb-1">廣告總花費 (區間 / YTD)</h3>
             <p className="text-3xl font-bold text-gray-800">${data?.metrics?.MTD_spend?.toLocaleString() || 0}</p>
             <p className="text-xs text-gray-400 mt-1">YTD: ${data?.metrics?.YTD_spend?.toLocaleString() || 0}</p>
             <p className={`text-sm mt-2 font-medium ${data?.metrics?.MoM_growth_percent! > 0 ? "text-red-500" : "text-green-500"}`}>
@@ -177,7 +211,6 @@ export default function DashboardPage() {
               <span className="ml-2 text-gray-400 font-normal">/ {data?.metrics?.YoY_growth_percent}% YoY</span>
             </p>
           </div>
-          {/* 其他原有指標保持不變 */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-500 mb-1">平台花費佔比</h3>
             <div className="mt-2 text-sm text-gray-700 space-y-1">
@@ -217,7 +250,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 🌟 V5 升級預留區塊：詳細數據表格 */}
+        {/* V5 深度洞察資料表 */}
         <div className="space-y-6">
           <h2 className="text-2xl font-bold text-gray-800">各平台深度洞察 (Deep Dive)</h2>
           
@@ -243,8 +276,14 @@ export default function DashboardPage() {
                   data.google_ads_details.map((ad, idx) => (
                     <tr key={idx} className="border-b hover:bg-gray-50">
                       <td className="py-3 px-4 font-medium">{ad.campaign_name}</td>
-                      <td className="py-3 px-4"><span className="px-2 py-1 bg-gray-200 rounded-full text-xs">{ad.type}</span></td>
-                      <td className="py-3 px-4">{ad.objective}</td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-1 bg-blue-100 text-blue-700 font-medium rounded-full text-xs whitespace-nowrap">
+                          {AD_TYPE_MAP[ad.type] || ad.type}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-gray-600 whitespace-nowrap">
+                        {AD_OBJ_MAP[ad.objective] || ad.objective}
+                      </td>
                       <td className="py-3 px-4 text-right">${ad.cost}</td>
                       <td className="py-3 px-4 text-right">{ad.impressions}</td>
                       <td className="py-3 px-4 text-right">{ad.clicks}</td>
@@ -254,7 +293,7 @@ export default function DashboardPage() {
                     </tr>
                   ))
                 ) : (
-                  <tr><td colSpan={9} className="py-8 text-center text-gray-400">等待後端 API 升級以載入詳細活動數據...</td></tr>
+                  <tr><td colSpan={9} className="py-8 text-center text-gray-400">目前所選日期範圍內沒有廣告資料，或等待資料載入中...</td></tr>
                 )}
               </tbody>
             </table>
@@ -283,20 +322,56 @@ export default function DashboardPage() {
                       <td className="py-3 px-4 text-right">{k.ctr}%</td>
                       <td className="py-3 px-4 text-right">{k.position}</td>
                     </tr>
-                  )) : (<tr><td colSpan={5} className="py-8 text-center text-gray-400">等待後端更新...</td></tr>)}
+                  )) : (<tr><td colSpan={5} className="py-8 text-center text-gray-400">目前沒有資料，或等待載入中...</td></tr>)}
                 </tbody>
               </table>
             </div>
 
             {/* GA4 Channels & Pages */}
             <div className="space-y-6">
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
                 <h3 className="text-lg font-bold text-orange-500 mb-4">GA4: Sessions by Channel</h3>
-                {data?.ga4_channels?.length ? null : <div className="py-4 text-center text-sm text-gray-400">等待後端更新...</div>}
+                {data?.ga4_channels?.length ? (
+                  <table className="min-w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-gray-600 border-b">
+                      <tr>
+                        <th className="py-2 px-4">Channel</th>
+                        <th className="py-2 px-4 text-right">Sessions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.ga4_channels.map((c, i) => (
+                        <tr key={i} className="border-b hover:bg-gray-50">
+                          <td className="py-2 px-4">{c.channel}</td>
+                          <td className="py-2 px-4 text-right">{c.sessions}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : <div className="py-4 text-center text-sm text-gray-400">目前沒有資料，或等待載入中...</div>}
               </div>
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
                 <h3 className="text-lg font-bold text-orange-500 mb-4">GA4: Top 10 網頁與跳出率</h3>
-                {data?.ga4_top_pages?.length ? null : <div className="py-4 text-center text-sm text-gray-400">等待後端更新...</div>}
+                {data?.ga4_top_pages?.length ? (
+                  <table className="min-w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-gray-600 border-b">
+                      <tr>
+                        <th className="py-2 px-4">Page Path</th>
+                        <th className="py-2 px-4 text-right">Views</th>
+                        <th className="py-2 px-4 text-right">Bounce Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.ga4_top_pages.map((p, i) => (
+                        <tr key={i} className="border-b hover:bg-gray-50">
+                          <td className="py-2 px-4 truncate max-w-[200px]" title={p.page_path}>{p.page_path}</td>
+                          <td className="py-2 px-4 text-right">{p.views}</td>
+                          <td className="py-2 px-4 text-right">{p.bounce_rate}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : <div className="py-4 text-center text-sm text-gray-400">目前沒有資料，或等待載入中...</div>}
               </div>
             </div>
           </div>
