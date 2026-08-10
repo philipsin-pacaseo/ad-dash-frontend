@@ -11,26 +11,29 @@ export default function AdminPage() {
   const [contactEmail, setContactEmail] = useState("");
   const [initialPassword, setInitialPassword] = useState("");
 
-  // 🌟 新增：建立多用戶狀態
+  // 3. 多用戶狀態
   const [targetTenantForUser, setTargetTenantForUser] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   
-  // 3. 平台整合 OAuth 授權狀態
+  // 4. 平台整合 OAuth 授權狀態
   const [tenantIdForAuth, setTenantIdForAuth] = useState("");
 
-  // 4. 子帳戶綁定與抓取狀態
+  // 5. 子帳戶綁定與抓取狀態
   const [bindTenantId, setBindTenantId] = useState("");
   const [googleAdsId, setGoogleAdsId] = useState("");
   const [ga4Id, setGa4Id] = useState("");
   const [gscUrl, setGscUrl] = useState("");
   const [metaId, setMetaId] = useState("");
 
-  // 🌟 新增：歷史數據抓取時間區間
+  // 6. 歷史數據抓取區間
   const [fetchStartDate, setFetchStartDate] = useState("");
   const [fetchEndDate, setFetchEndDate] = useState("");
 
-  // 5. 上帝視角：商戶列表狀態
+  // 🌟 V8 升級：數據覆蓋率與健康度狀態
+  const [coverageData, setCoverageData] = useState<any>(null);
+
+  // 上帝視角：商戶列表狀態
   const [tenants, setTenants] = useState<any[]>([]);
 
   // 全局 UI 狀態
@@ -40,7 +43,7 @@ export default function AdminPage() {
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
   // ==========================================
-  // 核心功能：資料庫同步
+  // 核心功能：資料庫同步 (V8)
   // ==========================================
   const handleSyncDB = async () => {
     if (!secret) return alert("請先輸入超級管理員密鑰");
@@ -76,7 +79,7 @@ export default function AdminPage() {
   };
 
   // ==========================================
-  // 🌟 核心功能：為現有商戶新增子帳號
+  // 核心功能：為現有商戶新增子帳號
   // ==========================================
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,31 +126,43 @@ export default function AdminPage() {
   };
 
   // ==========================================
-  // 核心功能：商戶下拉選單連動
+  // 🌟 核心功能：商戶下拉選單連動 (加入 Coverage 掃描)
   // ==========================================
   const handleTenantChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const tId = e.target.value;
     setBindTenantId(tId);
     setTenantIdForAuth(tId); 
 
+    // 清空現有欄位與狀態
     setGoogleAdsId(""); setGa4Id(""); setGscUrl(""); setMetaId("");
+    setCoverageData(null);
 
     if (!tId || !secret) return;
 
     setLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/integrations/${tId}?secret=${encodeURIComponent(secret)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status === "success" && data.integrations) {
-          setGoogleAdsId(data.integrations.google_ads || "");
-          setGa4Id(data.integrations.ga4 || "");
-          setGscUrl(data.integrations.gsc || "");
-          setMetaId(data.integrations.meta_ads || "");
+      // 1. 獲取已綁定帳號
+      const resInt = await fetch(`${BACKEND_URL}/api/admin/integrations/${tId}?secret=${encodeURIComponent(secret)}`);
+      if (resInt.ok) {
+        const dataInt = await resInt.json();
+        if (dataInt.status === "success" && dataInt.integrations) {
+          setGoogleAdsId(dataInt.integrations.google_ads || "");
+          setGa4Id(dataInt.integrations.ga4 || "");
+          setGscUrl(dataInt.integrations.gsc || "");
+          setMetaId(dataInt.integrations.meta_ads || "");
+        }
+      }
+
+      // 2. 🌟 掃描數據覆蓋率與健康度狀態
+      const resCov = await fetch(`${BACKEND_URL}/api/admin/data-coverage/${tId}?secret=${encodeURIComponent(secret)}`);
+      if (resCov.ok) {
+        const dataCov = await resCov.json();
+        if (dataCov.status === "success") {
+          setCoverageData(dataCov.coverage);
         }
       }
     } catch (error) {
-      console.error("讀取綁定資料失敗:", error);
+      console.error("讀取資料失敗:", error);
     } finally {
       setLoading(false);
     }
@@ -164,7 +179,7 @@ export default function AdminPage() {
   };
 
   // ==========================================
-  // 🌟 核心功能：綁定與歷史數據抓取 (含日期參數)
+  // 核心功能：綁定與歷史數據抓取
   // ==========================================
   const handleBindAndFetch = async (platform: string, paramName: string, paramValue: string) => {
     if (!bindTenantId) return alert("請先選擇目標商戶");
@@ -179,7 +194,6 @@ export default function AdminPage() {
         }
       }
 
-      // 💡 拼接歷史數據抓取的日期參數
       let endpoint = `${BACKEND_URL}/api/data/fetch-${platform}?tenant_id=${encodeURIComponent(bindTenantId)}&${paramName}=${encodeURIComponent(formattedValue)}`;
       
       if (fetchStartDate) endpoint += `&start_date=${fetchStartDate}`;
@@ -190,17 +204,53 @@ export default function AdminPage() {
       
       if (!res.ok) throw new Error(data.detail || `${platform} 綁定/抓取失敗`);
       setMessage({ text: `[${platform}] 抓取任務完成！${data.message}`, type: "success" });
+      
+      // 成功後重新刷新 Coverage 狀態
+      handleTenantChange({ target: { value: bindTenantId } } as any);
+      
     } catch (err: any) {
       setMessage({ text: err.message, type: "error" });
+      // 失敗後也重新刷新 Coverage 狀態 (顯示錯誤)
+      handleTenantChange({ target: { value: bindTenantId } } as any);
     } finally {
       setLoading(false);
     }
   };
 
+  // 🌟 輔助函數：渲染健康度標籤
+  const renderCoverageStatus = (platformKey: string) => {
+    if (!coverageData || !coverageData[platformKey]) return null;
+    const { min, max, info } = coverageData[platformKey];
+    
+    return (
+      <div className="mt-2 text-xs p-2 bg-gray-50 rounded border border-gray-100 space-y-1">
+        <div className="flex items-center gap-2">
+          {min && max ? (
+            <span className="text-emerald-600 font-bold bg-emerald-100 px-2 py-0.5 rounded">✅ 已入庫：{min} ~ {max}</span>
+          ) : (
+            <span className="text-gray-500 font-medium bg-gray-200 px-2 py-0.5 rounded">⚪ 尚未擁有歷史數據</span>
+          )}
+        </div>
+        
+        {info?.status === 'error' && (
+          <div className="text-red-600 font-medium break-words mt-1">
+            ❌ 抓取異常：{info?.error}
+          </div>
+        )}
+        
+        {info?.status === 'success' && info?.last_sync && (
+          <div className="text-blue-600 font-medium mt-1">
+            🔄 最後成功同步：{new Date(info.last_sync).toLocaleString()}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 p-8 pb-20">
       <div className="max-w-5xl mx-auto space-y-6">
-        <h1 className="text-3xl font-bold text-gray-800">超級管理員控制台 (企業營運版)</h1>
+        <h1 className="text-3xl font-bold text-gray-800">超級管理員控制台 (V8 數據營運版)</h1>
 
         {/* 密鑰與系統操作區 */}
         <div className="bg-white p-6 rounded-lg shadow border-t-4 border-gray-800 sticky top-4 z-10 flex flex-col md:flex-row gap-4 items-end">
@@ -237,7 +287,6 @@ export default function AdminPage() {
               </form>
             </div>
 
-            {/* 🌟 獨立出的多用戶管理區塊 */}
             <div className="bg-white p-6 rounded-lg shadow border-l-4 border-indigo-500">
               <h2 className="text-xl font-semibold mb-4">2. 新增子帳號 (多用戶管理)</h2>
               <form onSubmit={handleCreateUser} className="space-y-4">
@@ -282,33 +331,51 @@ export default function AdminPage() {
               </div>
               
               <div className="pt-4 border-t border-gray-100">
-                {/* 🌟 新增的歷史數據區間選擇器 */}
                 <div className="mb-4 p-3 bg-yellow-50 rounded border border-yellow-200">
                   <label className="block text-sm font-bold text-gray-700 mb-2">步驟 C：設定抓取區間 (留空則預設抓取昨日)</label>
                   <div className="flex gap-2 items-center">
-                    <input type="date" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm" value={fetchStartDate} onChange={(e) => setFetchStartDate(e.target.value)} />
+                    <input type="date" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm bg-white" value={fetchStartDate} onChange={(e) => setFetchStartDate(e.target.value)} />
                     <span className="text-gray-500">~</span>
-                    <input type="date" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm" value={fetchEndDate} onChange={(e) => setFetchEndDate(e.target.value)} />
+                    <input type="date" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm bg-white" value={fetchEndDate} onChange={(e) => setFetchEndDate(e.target.value)} />
                   </div>
                 </div>
 
                 <label className="block text-sm font-bold text-gray-700 mb-2">步驟 D：輸入子帳號 ID 並執行抓取</label>
-                <div className="space-y-3">
-                  <div className="flex gap-2">
-                    <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="Google Ads Customer ID" value={googleAdsId} onChange={(e) => setGoogleAdsId(e.target.value)} disabled={!bindTenantId} />
-                    <button onClick={() => handleBindAndFetch('google-ads', 'google_customer_id', googleAdsId)} disabled={!bindTenantId} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">抓取</button>
+                <div className="space-y-4">
+                  {/* Google Ads */}
+                  <div className="p-3 border border-gray-200 rounded-md bg-white">
+                    <div className="flex gap-2">
+                      <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="Google Ads Customer ID" value={googleAdsId} onChange={(e) => setGoogleAdsId(e.target.value)} disabled={!bindTenantId} />
+                      <button onClick={() => handleBindAndFetch('google-ads', 'google_customer_id', googleAdsId)} disabled={!bindTenantId || loading} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">抓取</button>
+                    </div>
+                    {renderCoverageStatus('google_ads')}
                   </div>
-                  <div className="flex gap-2">
-                    <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="GA4 Property ID" value={ga4Id} onChange={(e) => setGa4Id(e.target.value)} disabled={!bindTenantId} />
-                    <button onClick={() => handleBindAndFetch('ga4', 'ga4_property_id', ga4Id)} disabled={!bindTenantId} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">抓取</button>
+
+                  {/* GA4 */}
+                  <div className="p-3 border border-gray-200 rounded-md bg-white">
+                    <div className="flex gap-2">
+                      <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="GA4 Property ID" value={ga4Id} onChange={(e) => setGa4Id(e.target.value)} disabled={!bindTenantId} />
+                      <button onClick={() => handleBindAndFetch('ga4', 'ga4_property_id', ga4Id)} disabled={!bindTenantId || loading} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">抓取</button>
+                    </div>
+                    {renderCoverageStatus('ga4')}
                   </div>
-                  <div className="flex gap-2">
-                    <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="GSC 網域 (例如: outdooride.com)" value={gscUrl} onChange={(e) => setGscUrl(e.target.value)} disabled={!bindTenantId} />
-                    <button onClick={() => handleBindAndFetch('gsc', 'gsc_site_url', gscUrl)} disabled={!bindTenantId} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">抓取</button>
+
+                  {/* GSC */}
+                  <div className="p-3 border border-gray-200 rounded-md bg-white">
+                    <div className="flex gap-2">
+                      <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="GSC 網域 (例如: outdooride.com)" value={gscUrl} onChange={(e) => setGscUrl(e.target.value)} disabled={!bindTenantId} />
+                      <button onClick={() => handleBindAndFetch('gsc', 'gsc_site_url', gscUrl)} disabled={!bindTenantId || loading} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">抓取</button>
+                    </div>
+                    {renderCoverageStatus('gsc')}
                   </div>
-                  <div className="flex gap-2">
-                    <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="Meta Ad Account ID" value={metaId} onChange={(e) => setMetaId(e.target.value)} disabled={!bindTenantId} />
-                    <button onClick={() => handleBindAndFetch('meta-ads', 'meta_ad_account_id', metaId)} disabled={!bindTenantId} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">抓取</button>
+
+                  {/* Meta Ads */}
+                  <div className="p-3 border border-gray-200 rounded-md bg-white">
+                    <div className="flex gap-2">
+                      <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="Meta Ad Account ID" value={metaId} onChange={(e) => setMetaId(e.target.value)} disabled={!bindTenantId} />
+                      <button onClick={() => handleBindAndFetch('meta-ads', 'meta_ad_account_id', metaId)} disabled={!bindTenantId || loading} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">抓取</button>
+                    </div>
+                    {renderCoverageStatus('meta_ads')}
                   </div>
                 </div>
               </div>
