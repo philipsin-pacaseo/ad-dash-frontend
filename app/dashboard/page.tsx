@@ -87,7 +87,7 @@ export default function DashboardPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  // 🌟 新增：AI Agent 狀態管理
+  // 🌟 AI Agent 狀態管理
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
@@ -112,7 +112,7 @@ export default function DashboardPage() {
 
     setLoading(true);
     setError(null);
-    setAiInsight(null); // 切換日期或重新載入時，清空舊的 AI 報告
+    setAiInsight(null); 
 
     try {
       const controller = new AbortController();
@@ -144,7 +144,6 @@ export default function DashboardPage() {
     }
   };
 
-  // 🌟 新增：呼叫後端 Gemini AI API 的功能
   const generateAIInsight = async () => {
     const tenantId = sessionStorage.getItem("tenant_id");
     if (!tenantId) return alert("請先登入");
@@ -190,7 +189,6 @@ export default function DashboardPage() {
     fetchDashboardData();
   };
 
-  // 🛡️ 防禦性渲染：載入中且無資料時
   if (loading && !data) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -199,7 +197,6 @@ export default function DashboardPage() {
     );
   }
 
-  // 🛡️ 防禦性渲染：發生致命錯誤且無舊資料可顯示時
   if (error && !data) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 flex-col space-y-4">
@@ -230,13 +227,13 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* 🌟 部署 AI 觸發按鈕 */}
+          {/* 🌟 優化：使用模型中立的文案 */}
           <button 
             onClick={generateAIInsight} 
             disabled={isGeneratingAI || !data || loading}
             className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded shadow hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 transition flex items-center gap-2 text-sm font-medium"
           >
-            {isGeneratingAI ? "🧠 Gemini 解析中..." : "✨ 產生 AI 營運報告"}
+            {isGeneratingAI ? "🧠 AI 深度解析中..." : "✨ 產生 AI 營運報告"}
           </button>
           <div className="h-6 w-px bg-gray-300 mx-2"></div>
           <span className="text-sm text-gray-600 font-medium">租戶：{companyName}</span>
@@ -253,11 +250,11 @@ export default function DashboardPage() {
 
       <main className="p-8 max-w-7xl mx-auto space-y-8">
         
-        {/* 🌟 AI 智能洞察區塊 (條件渲染) */}
+        {/* 🌟 優化：AI 智能洞察區塊模型中立化 */}
         {(isGeneratingAI || aiInsight) && (
           <div className="bg-white p-8 rounded-xl shadow-sm border-l-4 border-purple-500 animate-fade-in-up">
             <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-              🤖 Gemini 智能行銷總監分析
+              🤖 AI 智能行銷總監分析
             </h2>
             {isGeneratingAI ? (
               <div className="flex flex-col items-center justify-center py-10 space-y-4">
