@@ -87,6 +87,10 @@ export default function DashboardPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
+  // 🌟 新增：AI Agent 狀態管理
+  const [aiInsight, setAiInsight] = useState<string | null>(null);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
   useEffect(() => {
@@ -108,6 +112,7 @@ export default function DashboardPage() {
 
     setLoading(true);
     setError(null);
+    setAiInsight(null); // 切換日期或重新載入時，清空舊的 AI 報告
 
     try {
       const controller = new AbortController();
@@ -136,6 +141,31 @@ export default function DashboardPage() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 🌟 新增：呼叫後端 Gemini AI API 的功能
+  const generateAIInsight = async () => {
+    const tenantId = sessionStorage.getItem("tenant_id");
+    if (!tenantId) return alert("請先登入");
+    
+    setIsGeneratingAI(true);
+    setAiInsight(null);
+    try {
+      const queryParams = new URLSearchParams({
+        tenant_id: tenantId,
+        start_date: startDate,
+        end_date: endDate
+      });
+      const res = await fetch(`${BACKEND_URL}/api/ai/insights?${queryParams.toString()}`);
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.detail || "AI 產生失敗");
+      
+      setAiInsight(result.insights);
+    } catch (err: any) {
+      alert(`AI 洞察錯誤: ${err.message}`);
+    } finally {
+      setIsGeneratingAI(false);
     }
   };
 
@@ -184,7 +214,6 @@ export default function DashboardPage() {
     );
   }
 
-  // 🛡️ 安全的變數提取 (Null-Safety)
   const momGrowth = data?.metrics?.MoM_growth_percent || 0;
   const isMomPositive = momGrowth > 0;
 
@@ -201,6 +230,15 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-4">
+          {/* 🌟 部署 AI 觸發按鈕 */}
+          <button 
+            onClick={generateAIInsight} 
+            disabled={isGeneratingAI || !data || loading}
+            className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded shadow hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 transition flex items-center gap-2 text-sm font-medium"
+          >
+            {isGeneratingAI ? "🧠 Gemini 解析中..." : "✨ 產生 AI 營運報告"}
+          </button>
+          <div className="h-6 w-px bg-gray-300 mx-2"></div>
           <span className="text-sm text-gray-600 font-medium">租戶：{companyName}</span>
           <button onClick={handleLogout} className="text-sm px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition">安全登出</button>
         </div>
@@ -215,6 +253,27 @@ export default function DashboardPage() {
 
       <main className="p-8 max-w-7xl mx-auto space-y-8">
         
+        {/* 🌟 AI 智能洞察區塊 (條件渲染) */}
+        {(isGeneratingAI || aiInsight) && (
+          <div className="bg-white p-8 rounded-xl shadow-sm border-l-4 border-purple-500 animate-fade-in-up">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+              🤖 Gemini 智能行銷總監分析
+            </h2>
+            {isGeneratingAI ? (
+              <div className="flex flex-col items-center justify-center py-10 space-y-4">
+                <div className="h-10 w-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-purple-600 font-medium animate-pulse">正在為您深度解析跨平台數據關聯性，請稍候...</p>
+              </div>
+            ) : (
+              <div className="prose prose-purple max-w-none text-gray-800">
+                <pre className="whitespace-pre-wrap font-sans text-[15px] leading-relaxed bg-purple-50/50 p-6 rounded-lg border border-purple-100 shadow-inner">
+                  {aiInsight}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-500 mb-1">廣告總花費 (區間 / YTD)</h3>
@@ -266,7 +325,6 @@ export default function DashboardPage() {
         <div className="space-y-6">
           <h2 className="text-2xl font-bold text-gray-800">各平台深度洞察 (Deep Dive)</h2>
           
-          {/* Google Ads 詳細成效 */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto relative">
             {loading && <div className="absolute inset-0 bg-white/50 z-10"></div>}
             <h3 className="text-lg font-bold text-blue-600 mb-4">Google Ads 廣告活動成效</h3>
@@ -315,7 +373,6 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
             {loading && <div className="absolute inset-0 bg-white/50 z-10"></div>}
             
-            {/* GSC Top 20 搜尋關鍵字 */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
               <h3 className="text-lg font-bold text-emerald-600 mb-4">GSC: Top 20 搜尋關鍵字</h3>
               <table className="min-w-full text-sm text-left">
@@ -343,7 +400,6 @@ export default function DashboardPage() {
             </div>
 
             <div className="space-y-6">
-              {/* GA4 Channels */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
                 <h3 className="text-lg font-bold text-orange-500 mb-4">GA4: Sessions by Channel</h3>
                 {data?.ga4_channels?.length ? (
@@ -366,7 +422,6 @@ export default function DashboardPage() {
                 ) : <div className="py-4 text-center text-sm text-gray-400">目前沒有資料，或等待載入中...</div>}
               </div>
               
-              {/* GA4 Top 10 網頁標題與跳出率 */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
                 <h3 className="text-lg font-bold text-orange-500 mb-4">GA4: Top 10 網頁標題與跳出率</h3>
                 {data?.ga4_top_pages?.length ? (
