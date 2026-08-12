@@ -36,6 +36,9 @@ export default function AdminPage() {
   // 上帝視角：商戶列表狀態
   const [tenants, setTenants] = useState<any[]>([]);
 
+  // 🌟 V8.5 新增：AI 引擎動態設定狀態
+  const [aiModel, setAiModel] = useState("");
+
   // 全局 UI 狀態
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" } | null>(null);
@@ -217,6 +220,45 @@ export default function AdminPage() {
     }
   };
 
+  // ==========================================
+  // 🌟 核心功能：系統全域設定 (AI 模型動態切換)
+  // ==========================================
+  const fetchCurrentAiModel = async () => {
+    if (!secret) return alert("請先輸入超級管理員密鑰");
+    setLoading(true); setMessage(null);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/settings/ai-model?secret=${encodeURIComponent(secret)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "無法載入目前 AI 模型設定");
+      setAiModel(data.model_name);
+      setMessage({ text: `已成功讀取目前 AI 引擎：${data.model_name}`, type: "success" });
+    } catch (err: any) {
+      setMessage({ text: err.message, type: "error" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateAiModel = async () => {
+    if (!secret) return alert("請先輸入超級管理員密鑰");
+    if (!aiModel) return alert("模型名稱不能為空");
+    setLoading(true); setMessage(null);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/settings/ai-model?secret=${encodeURIComponent(secret)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model_name: aiModel }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "AI 模型更新失敗");
+      setMessage({ text: data.message, type: "success" });
+    } catch (err: any) {
+      setMessage({ text: err.message, type: "error" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 🌟 輔助函數：渲染健康度標籤
   const renderCoverageStatus = (platformKey: string) => {
     if (!coverageData || !coverageData[platformKey]) return null;
@@ -250,7 +292,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-100 p-8 pb-20">
       <div className="max-w-5xl mx-auto space-y-6">
-        <h1 className="text-3xl font-bold text-gray-800">超級管理員控制台 (V8 數據營運版)</h1>
+        <h1 className="text-3xl font-bold text-gray-800">超級管理員控制台 (V8.5 動態架構版)</h1>
 
         {/* 密鑰與系統操作區 */}
         <div className="bg-white p-6 rounded-lg shadow border-t-4 border-gray-800 sticky top-4 z-10 flex flex-col md:flex-row gap-4 items-end">
@@ -429,6 +471,44 @@ export default function AdminPage() {
               點擊頂部按鈕載入商戶列表
             </div>
           )}
+        </div>
+
+        {/* ========================================== */}
+        {/* 🌟 區塊 6：系統全域設定 (AI 模型動態切換) */}
+        {/* ========================================== */}
+        <div className="bg-white p-6 rounded-lg shadow border-t-4 border-yellow-500 mt-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-gray-800">6. ⚙️ 系統全域設定 (AI 引擎切換)</h2>
+            <p className="text-sm text-gray-500 mt-1">變更後將立即生效，所有商戶的 AI 行銷總監都會同步切換至您指定的大語言模型 (LLM)。</p>
+          </div>
+          <div className="flex flex-col md:flex-row gap-4 items-end max-w-2xl">
+            <div className="flex-1 w-full">
+              <label className="block text-sm font-bold text-gray-700 mb-2">目前使用的 OpenRouter 模型 ID</label>
+              <input 
+                type="text" 
+                value={aiModel} 
+                onChange={(e) => setAiModel(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-yellow-500 bg-gray-50"
+                placeholder="例如：nvidia/nemotron-4-340b-instruct:free"
+              />
+            </div>
+            <div className="flex gap-2 w-full md:w-auto">
+              <button 
+                onClick={fetchCurrentAiModel} 
+                disabled={loading || !secret}
+                className="px-4 py-2 h-[42px] bg-gray-200 text-gray-700 font-medium rounded hover:bg-gray-300 disabled:opacity-50 text-sm whitespace-nowrap transition"
+              >
+                🔄 讀取設定
+              </button>
+              <button 
+                onClick={handleUpdateAiModel} 
+                disabled={loading || !secret || !aiModel}
+                className="px-6 py-2 h-[42px] bg-yellow-600 text-white font-medium rounded hover:bg-yellow-700 disabled:opacity-50 text-sm whitespace-nowrap shadow-sm transition"
+              >
+                💾 儲存切換
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* 全局系統提示訊息 */}
