@@ -24,7 +24,7 @@ const AD_OBJ_MAP: Record<string, string> = {
 };
 
 interface DashboardData {
-  currency?: string; // 🌟 接收後端傳來的商戶專屬貨幣
+  currency?: string; 
   metrics: {
     MTD_spend: number; YTD_spend: number; 
     MoM_growth_percent: number; YoY_growth_percent: number;
@@ -44,12 +44,12 @@ interface DashboardData {
 }
 
 // 🌟 全域數字與貨幣格式化引擎
-const formatNum = (num: number | undefined | null) => {
+const formatNum = (num: any) => {
   if (num == null) return "0";
   return Number(num).toLocaleString('en-US');
 };
 
-const formatCurr = (num: number | undefined | null, currCode: string = "HKD") => {
+const formatCurr = (num: any, currCode: string = "HKD") => {
   if (num == null) return `${currCode} 0.00`;
   return `${currCode} ${Number(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
@@ -165,7 +165,6 @@ export default function DashboardPage() {
 
   const momGrowth = data?.metrics?.MoM_growth_percent || 0;
   const isMomPositive = momGrowth > 0;
-  // 🌟 提取商戶專屬貨幣，預設為 HKD
   const curr = data?.currency || "HKD";
 
   return (
@@ -224,7 +223,6 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-500 mb-1">廣告總花費 (區間 / YTD)</h3>
-            {/* 🌟 套用貨幣格式化 */}
             <p className="text-3xl font-bold text-gray-800">{formatCurr(data?.metrics?.MTD_spend, curr)}</p>
             <p className="text-xs text-gray-400 mt-1">YTD: {formatCurr(data?.metrics?.YTD_spend, curr)}</p>
             <p className={`text-sm mt-2 font-medium ${isMomPositive ? "text-red-500" : "text-green-500"}`}>
@@ -241,7 +239,6 @@ export default function DashboardPage() {
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-500 mb-1">網站總流量 (GA4)</h3>
-            {/* 🌟 套用數字格式化 */}
             <p className="text-3xl font-bold text-blue-600">{formatNum(data?.traffic?.sessions)}</p>
             <p className="text-sm text-gray-500 mt-2">瀏覽量: {formatNum(data?.traffic?.page_views)}</p>
           </div>
@@ -260,9 +257,9 @@ export default function DashboardPage() {
               <LineChart data={data?.trend_chart || []} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                 <XAxis dataKey="date" stroke="#6b7280" fontSize={12} tickMargin={10} />
-                {/* 🌟 Y軸與提示框套用格式化 */}
-                <YAxis stroke="#6b7280" fontSize={12} tickFormatter={(value) => formatNum(value)} />
-                <Tooltip formatter={(value: number) => formatCurr(value, curr)} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                {/* 🌟 修復 TypeScript 型別錯誤 */}
+                <YAxis stroke="#6b7280" fontSize={12} tickFormatter={(value: any) => formatNum(value)} />
+                <Tooltip formatter={(value: any) => formatCurr(value, curr)} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                 <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
                 <Line type="monotone" dataKey="Google" stroke="#4285F4" strokeWidth={3} dot={false} />
                 <Line type="monotone" dataKey="Meta" stroke="#1877F2" strokeWidth={3} dot={false} />
@@ -299,7 +296,6 @@ export default function DashboardPage() {
                       <td className="py-3 px-4 font-medium">{ad.campaign_name}</td>
                       <td className="py-3 px-4"><span className="px-2 py-1 bg-blue-100 text-blue-700 font-medium rounded-full text-xs whitespace-nowrap">{AD_TYPE_MAP[ad.type] || ad.type}</span></td>
                       <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{AD_OBJ_MAP[ad.objective] || ad.objective}</td>
-                      {/* 🌟 表格套用格式化 */}
                       <td className="py-3 px-4 text-right font-medium">{formatCurr(ad.cost, curr)}</td>
                       <td className="py-3 px-4 text-right">{formatNum(ad.impressions)}</td>
                       <td className="py-3 px-4 text-right">{formatNum(ad.clicks)}</td>
