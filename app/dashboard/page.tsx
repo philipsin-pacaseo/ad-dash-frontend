@@ -1,5 +1,4 @@
 "use client";
-// 🌟 強制清除 Zeabur 快取，觸發全新打包 (2026-08)
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -71,12 +70,14 @@ export default function DashboardPage() {
     };
   }, [router]);
 
+  // 1. 頁面載入時初始化日期與商戶名稱
   useEffect(() => {
     const end = new Date();
     const start = new Date();
     start.setDate(end.getDate() - 30);
     setEndDate(end.toISOString().split("T")[0]);
     setStartDate(start.toISOString().split("T")[0]);
+    
     const storedCompany = sessionStorage.getItem("company_name");
     if (storedCompany) setCompanyName(storedCompany);
   }, []);
@@ -100,6 +101,15 @@ export default function DashboardPage() {
     } finally { setLoading(false); }
   };
 
+  // 🌟 2. 修復核心：當日期準備好時，自動觸發 API 抓取數據！
+  useEffect(() => {
+    if (startDate && endDate) {
+      fetchDashboardData(startDate, endDate);
+    }
+    // 此處不把 fetchDashboardData 加入依賴，避免重複渲染
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate]);
+
   // 🌟 日期快捷選擇邏輯
   const applyMTD = () => {
     const today = new Date();
@@ -107,7 +117,6 @@ export default function DashboardPage() {
     const sd = start.toISOString().split("T")[0];
     const ed = today.toISOString().split("T")[0];
     setStartDate(sd); setEndDate(ed);
-    fetchDashboardData(sd, ed);
   };
 
   const applyYTD = () => {
@@ -116,7 +125,6 @@ export default function DashboardPage() {
     const sd = start.toISOString().split("T")[0];
     const ed = today.toISOString().split("T")[0];
     setStartDate(sd); setEndDate(ed);
-    fetchDashboardData(sd, ed);
   };
 
   const applyDateFilter = () => {
@@ -196,7 +204,6 @@ export default function DashboardPage() {
     if (!tenantId) return alert("請先登入");
     setIsGeneratingAI(true); setAiInsight(null);
     try {
-      // 🌟 修正：補回 URLSearchParams，確保語法正確無誤
       const queryParams = new URLSearchParams({ tenant_id: tenantId, start_date: startDate, end_date: endDate });
       const res = await fetch(`${BACKEND_URL}/api/ai/insights?${queryParams.toString()}`);
       const result = await res.json();
@@ -297,7 +304,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 🌟 強階版：雙 Y 軸與群組切換趨勢圖 (加入 as any 強制型別通過) */}
+        {/* 🌟 強階版：雙 Y 軸與群組切換趨勢圖 */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-bold text-gray-800">廣告花費與 ROAS 趨勢 ({curr})</h2>
@@ -322,7 +329,6 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                 <XAxis dataKey="date" stroke="#6b7280" fontSize={12} tickMargin={12} />
                 
-                {/* 🌟 熱修復：加上 as any 突破 TypeScript 編譯檢查 */}
                 <YAxis yAxisId="left" stroke="#6b7280" fontSize={12} tickFormatter={((v: any) => formatNum(v)) as any} />
                 <YAxis yAxisId="right" orientation="right" stroke="#ff7300" fontSize={12} tickFormatter={((v: any) => `${v}x`) as any} />
                 
