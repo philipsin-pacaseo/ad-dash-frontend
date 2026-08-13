@@ -1,4 +1,5 @@
 "use client";
+// 🌟 強制清除 Zeabur 快取，觸發全新打包 (2026-08)
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
