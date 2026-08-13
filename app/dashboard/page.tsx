@@ -195,7 +195,8 @@ export default function DashboardPage() {
     if (!tenantId) return alert("請先登入");
     setIsGeneratingAI(true); setAiInsight(null);
     try {
-      const queryParams = newSearchParams({ tenant_id: tenantId, start_date: startDate, end_date: endDate });
+      // 🌟 修正：補回 URLSearchParams，確保語法正確無誤
+      const queryParams = new URLSearchParams({ tenant_id: tenantId, start_date: startDate, end_date: endDate });
       const res = await fetch(`${BACKEND_URL}/api/ai/insights?${queryParams.toString()}`);
       const result = await res.json();
       if (!res.ok) throw new Error(result.detail);
