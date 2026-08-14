@@ -27,7 +27,7 @@ interface DashboardData {
 const formatNum = (num: any) => num == null ? "0" : Number(num).toLocaleString('en-US');
 const formatCurr = (num: any, currCode: string = "HKD") => num == null ? `${currCode} 0.00` : `${currCode} ${Number(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-// 🌟 新增：精準的本地時區日期格式化工具 (解決 .toISOString() 的 UTC 偏移問題)
+// 🌟 精準的本地時區日期格式化工具
 const getLocalDateString = (date: Date) => {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -51,10 +51,10 @@ export default function DashboardPage() {
   const [newPassword, setNewPassword] = useState("");
   const [sortConfig, setSortConfig] = useState<{ table: string; key: string; direction: 'asc' | 'desc' } | null>(null);
 
-  // 🌟 圖表群組狀態 (日/週/月)
+  // 圖表群組狀態 (日/週/月)
   const [timeGrouping, setTimeGrouping] = useState<"day" | "week" | "month">("day");
 
-  // 🌟 圖表折線顯示開關狀態 (可點擊切換)
+  // 圖表折線顯示開關狀態
   const [activeLines, setActiveLines] = useState({
     Google: true,
     Meta: true,
@@ -91,7 +91,6 @@ export default function DashboardPage() {
     const start = new Date();
     start.setDate(end.getDate() - 30);
     
-    // 🌟 修正：使用本地時區轉換，避免初始載入時的日期偏移
     setEndDate(getLocalDateString(end));
     setStartDate(getLocalDateString(start));
     
@@ -118,24 +117,30 @@ export default function DashboardPage() {
     } finally { setLoading(false); }
   };
 
-  // 🌟 日期快捷選擇邏輯 (修正時區)
+  // 🌟 【關鍵修復】補回丟失的資料抓取觸發器 (Trigger)
+  useEffect(() => {
+    if (startDate && endDate) {
+      fetchDashboardData(startDate, endDate);
+    }
+    // 為了避免重複觸發，這裡我們只監聽日期的變化
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate]);
+
   const applyMTD = () => {
     const today = new Date();
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
     const sd = getLocalDateString(start);
     const ed = getLocalDateString(today);
     setStartDate(sd); setEndDate(ed);
-    fetchDashboardData(sd, ed);
+    // 注意：因為上面補回了 useEffect 監聽器，這裡可以不用手動 fetch，但保留亦無害且更即時
   };
 
-  // 🌟 日期快捷選擇邏輯 (修正時區)
   const applyYTD = () => {
     const today = new Date();
     const start = new Date(today.getFullYear(), 0, 1);
     const sd = getLocalDateString(start);
     const ed = getLocalDateString(today);
     setStartDate(sd); setEndDate(ed);
-    fetchDashboardData(sd, ed);
   };
 
   const applyDateFilter = () => {
@@ -155,7 +160,7 @@ export default function DashboardPage() {
         const day = dateObj.getDay();
         const diff = dateObj.getDate() - day + (day === 0 ? -6 : 1); 
         const monday = new Date(dateObj.setDate(diff));
-        key = getLocalDateString(monday); // 🌟 確保週一日期不會因為時區偏移
+        key = getLocalDateString(monday); 
       } else if (timeGrouping === "month") {
         key = curr.date.substring(0, 7);
       }
@@ -175,7 +180,6 @@ export default function DashboardPage() {
     })).sort((a, b) => a.date.localeCompare(b.date));
   }, [data?.trend_chart, timeGrouping]);
 
-  // 🌟 圖例點擊事件：切換折線顯示隱藏
   const handleLegendClick = (e: any) => {
     const { dataKey } = e;
     setActiveLines(prev => ({
