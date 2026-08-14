@@ -46,6 +46,14 @@ export default function DashboardPage() {
   // 🌟 圖表群組狀態 (日/週/月)
   const [timeGrouping, setTimeGrouping] = useState<"day" | "week" | "month">("day");
 
+  // 🌟 圖表折線顯示開關狀態 (可點擊切換)
+  const [activeLines, setActiveLines] = useState({
+    Google: true,
+    Meta: true,
+    Total: true,
+    ROAS: true
+  });
+
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
   // 🛡️ 企業級資安：30 分鐘閒置自動登出
@@ -70,14 +78,12 @@ export default function DashboardPage() {
     };
   }, [router]);
 
-  // 1. 頁面載入時初始化日期與商戶名稱
   useEffect(() => {
     const end = new Date();
     const start = new Date();
     start.setDate(end.getDate() - 30);
     setEndDate(end.toISOString().split("T")[0]);
     setStartDate(start.toISOString().split("T")[0]);
-    
     const storedCompany = sessionStorage.getItem("company_name");
     if (storedCompany) setCompanyName(storedCompany);
   }, []);
@@ -101,22 +107,13 @@ export default function DashboardPage() {
     } finally { setLoading(false); }
   };
 
-  // 🌟 2. 修復核心：當日期準備好時，自動觸發 API 抓取數據！
-  useEffect(() => {
-    if (startDate && endDate) {
-      fetchDashboardData(startDate, endDate);
-    }
-    // 此處不把 fetchDashboardData 加入依賴，避免重複渲染
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate]);
-
-  // 🌟 日期快捷選擇邏輯
   const applyMTD = () => {
     const today = new Date();
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
     const sd = start.toISOString().split("T")[0];
     const ed = today.toISOString().split("T")[0];
     setStartDate(sd); setEndDate(ed);
+    fetchDashboardData(sd, ed);
   };
 
   const applyYTD = () => {
@@ -125,6 +122,7 @@ export default function DashboardPage() {
     const sd = start.toISOString().split("T")[0];
     const ed = today.toISOString().split("T")[0];
     setStartDate(sd); setEndDate(ed);
+    fetchDashboardData(sd, ed);
   };
 
   const applyDateFilter = () => {
@@ -132,7 +130,6 @@ export default function DashboardPage() {
     fetchDashboardData();
   };
 
-  // 🌟 動態圖表聚合引擎 (Group By)
   const groupedTrendData = useMemo(() => {
     if (!data?.trend_chart) return [];
     if (timeGrouping === "day") return data.trend_chart;
@@ -165,7 +162,15 @@ export default function DashboardPage() {
     })).sort((a, b) => a.date.localeCompare(b.date));
   }, [data?.trend_chart, timeGrouping]);
 
-  // 排序引擎邏輯
+  // 🌟 圖例點擊事件：切換折線顯示隱藏
+  const handleLegendClick = (e: any) => {
+    const { dataKey } = e;
+    setActiveLines(prev => ({
+      ...prev,
+      [dataKey as keyof typeof prev]: !prev[dataKey as keyof typeof prev]
+    }));
+  };
+
   const handleSort = (table: string, key: string) => {
     let direction: 'asc' | 'desc' = 'desc';
     if (sortConfig && sortConfig.table === table && sortConfig.key === key && sortConfig.direction === 'desc') direction = 'asc';
@@ -235,7 +240,6 @@ export default function DashboardPage() {
       <header className="bg-white shadow-sm px-8 py-4 flex flex-col xl:flex-row justify-between items-center gap-4">
         <h1 className="text-2xl font-bold text-gray-800">Ad-Dash 數據中心</h1>
         
-        {/* 🌟 增強版 Date Picker (包含 MTD / YTD) */}
         <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-md border border-gray-200">
           <button onClick={applyMTD} className="px-3 py-1 bg-white border border-gray-300 text-gray-700 rounded text-sm hover:bg-gray-100 font-medium transition">MTD</button>
           <button onClick={applyYTD} className="px-3 py-1 bg-white border border-gray-300 text-gray-700 rounded text-sm hover:bg-gray-100 font-medium transition">YTD</button>
@@ -266,7 +270,6 @@ export default function DashboardPage() {
 
       <main className="p-8 max-w-7xl mx-auto space-y-8">
         
-        {/* AI Insight */}
         {(isGeneratingAI || aiInsight) && (
           <div className="bg-white p-8 rounded-xl shadow-sm border-l-4 border-purple-500 animate-fade-in-up">
             <h2 className="text-2xl font-bold text-gray-800 mb-4">🤖 AI 智能行銷總監分析</h2>
@@ -278,7 +281,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* 頂部四格指標 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-500 mb-1">廣告總花費</h3>
@@ -304,12 +306,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 🌟 強階版：雙 Y 軸與群組切換趨勢圖 */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-bold text-gray-800">廣告花費與 ROAS 趨勢 ({curr})</h2>
             
-            {/* Group By 切換器 */}
             <div className="flex gap-1 bg-gray-100 p-1 rounded-lg border border-gray-200">
               {(["day", "week", "month"] as const).map(tg => (
                 <button
@@ -339,12 +339,19 @@ export default function DashboardPage() {
                   }) as any} 
                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px -2px rgb(0 0 0 / 0.12)' }} 
                 />
-                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
                 
-                <Line yAxisId="left" type="monotone" dataKey="Total" name="總花費" stroke="#10b981" strokeWidth={3} dot={false} />
-                <Line yAxisId="left" type="monotone" dataKey="Google" name="Google 花費" stroke="#4285F4" strokeWidth={2} strokeDasharray="3 3" dot={false} />
-                <Line yAxisId="left" type="monotone" dataKey="Meta" name="Meta 花費" stroke="#1877F2" strokeWidth={2} strokeDasharray="3 3" dot={false} />
-                <Line yAxisId="right" type="monotone" dataKey="ROAS" name="綜合 ROAS" stroke="#ff7300" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                {/* 🌟 圖例綁定點擊事件，並加上游標樣式 */}
+                <Legend 
+                  iconType="circle" 
+                  onClick={handleLegendClick}
+                  wrapperStyle={{ paddingTop: '20px', cursor: 'pointer', userSelect: 'none' }} 
+                />
+                
+                {/* 🌟 根據狀態控制折線是否顯示 (hide) */}
+                <Line hide={!activeLines.Google} yAxisId="left" type="monotone" dataKey="Google" name="Google 花費" stroke="#4285F4" strokeWidth={2} strokeDasharray="3 3" dot={false} />
+                <Line hide={!activeLines.Meta} yAxisId="left" type="monotone" dataKey="Meta" name="Meta 花費" stroke="#1877F2" strokeWidth={2} strokeDasharray="3 3" dot={false} />
+                <Line hide={!activeLines.ROAS} yAxisId="right" type="monotone" dataKey="ROAS" name="綜合 ROAS" stroke="#ff7300" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                <Line hide={!activeLines.Total} yAxisId="left" type="monotone" dataKey="Total" name="總花費" stroke="#10b981" strokeWidth={3} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -354,7 +361,6 @@ export default function DashboardPage() {
         <div className="space-y-6">
           <h2 className="text-2xl font-bold text-gray-800">各平台深度洞察 (Deep Dive)</h2>
           
-          {/* Google Ads 表格 */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
             <h3 className="text-lg font-bold text-blue-600 mb-4">Google Ads 廣告活動成效</h3>
             <table className="min-w-full text-sm text-left">
@@ -386,7 +392,6 @@ export default function DashboardPage() {
             </table>
           </div>
 
-          {/* Meta Ads 表格 */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
             <h3 className="text-lg font-bold text-blue-800 mb-4">Meta Ads 廣告活動成效</h3>
             <table className="min-w-full text-sm text-left">
