@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link"; // 🌟 引入 Link 組件
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
@@ -278,13 +279,20 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-4">
-          <button onClick={generateAIInsight} disabled={isGeneratingAI || !data || loading} className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded shadow hover:from-purple-700 transition text-sm font-medium">
+          {/* 🌟 擴充：競品戰情室導覽按鈕 */}
+          <Link 
+            href="/competitor" 
+            className="bg-purple-100 text-purple-700 px-4 py-2 rounded font-medium text-sm hover:bg-purple-200 transition whitespace-nowrap"
+          >
+            🎯 競品戰情室
+          </Link>
+          <button onClick={generateAIInsight} disabled={isGeneratingAI || !data || loading} className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded shadow hover:from-purple-700 transition text-sm font-medium whitespace-nowrap">
             {isGeneratingAI ? "🧠 解析中..." : "✨ AI 報告"}
           </button>
           <div className="h-6 w-px bg-gray-300 mx-2"></div>
-          <span className="text-sm text-gray-600 font-medium">租戶：{companyName}</span>
-          <button onClick={() => setShowPwdModal(true)} className="text-sm px-3 py-2 text-blue-600 hover:bg-blue-50 font-medium rounded transition">修改密碼</button>
-          <button onClick={() => { sessionStorage.clear(); router.push("/"); }} className="text-sm px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition font-medium">登出</button>
+          <span className="text-sm text-gray-600 font-medium whitespace-nowrap">租戶：{companyName}</span>
+          <button onClick={() => setShowPwdModal(true)} className="text-sm px-3 py-2 text-blue-600 hover:bg-blue-50 font-medium rounded transition whitespace-nowrap">修改密碼</button>
+          <button onClick={() => { sessionStorage.clear(); router.push("/"); }} className="text-sm px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition font-medium whitespace-nowrap">登出</button>
         </div>
       </header>
 
