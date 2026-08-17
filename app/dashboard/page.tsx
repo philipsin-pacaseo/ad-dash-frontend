@@ -16,7 +16,8 @@ interface DashboardData {
   platform_breakdown: { google: number; meta: number; };
   traffic: { sessions: number; page_views: number; };
   seo: { clicks: number; impressions: number; };
-  trend_chart: Array<{ date: string; Google: number; Meta: number; Total: number; ROAS?: number; }>;
+  // 🌟 擴充：加入 Shopline_Rev 型別
+  trend_chart: Array<{ date: string; Google: number; Meta: number; Total: number; ROAS?: number; Shopline_Rev?: number; }>;
   google_ads_details?: Array<{ campaign_name: string; type: string; objective: string; impressions: number; clicks: number; cost: number; conversions: number; conversion_value: number; roas: number; }>;
   meta_ads_details?: Array<{ campaign_name: string; spend: number; impressions: number; clicks: number; conversions: number; cpa: number; roas: number; }>;
   ga4_channels?: Array<{ channel: string; sessions: number }>;
@@ -54,8 +55,9 @@ export default function DashboardPage() {
   // 圖表群組狀態 (日/週/月)
   const [timeGrouping, setTimeGrouping] = useState<"day" | "week" | "month">("day");
 
-  // 圖表折線顯示開關狀態
+  // 🌟 圖表折線顯示開關狀態 (加入 Revenue)
   const [activeLines, setActiveLines] = useState({
+    Revenue: true,
     Google: true,
     Meta: true,
     Total: true,
@@ -117,12 +119,11 @@ export default function DashboardPage() {
     } finally { setLoading(false); }
   };
 
-  // 🌟 【關鍵修復】補回丟失的資料抓取觸發器 (Trigger)
+  // 🌟 觸發器 (Trigger)
   useEffect(() => {
     if (startDate && endDate) {
       fetchDashboardData(startDate, endDate);
     }
-    // 為了避免重複觸發，這裡我們只監聽日期的變化
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDate, endDate]);
 
@@ -132,7 +133,6 @@ export default function DashboardPage() {
     const sd = getLocalDateString(start);
     const ed = getLocalDateString(today);
     setStartDate(sd); setEndDate(ed);
-    // 注意：因為上面補回了 useEffect 監聽器，這裡可以不用手動 fetch，但保留亦無害且更即時
   };
 
   const applyYTD = () => {
@@ -148,9 +148,16 @@ export default function DashboardPage() {
     fetchDashboardData();
   };
 
+  // 🌟 動態圖表聚合引擎 (加入嚴謹的真實 ROAS 數學加權)
   const groupedTrendData = useMemo(() => {
     if (!data?.trend_chart) return [];
-    if (timeGrouping === "day") return data.trend_chart;
+    if (timeGrouping === "day") {
+      return data.trend_chart.map(item => ({
+        ...item,
+        // 確保單日視圖也能精準提取後端所使用的真實營收
+        Shopline_Rev: item.Shopline_Rev || (item.ROAS && item.Total ? item.ROAS * item.Total : 0)
+      }));
+    }
 
     const grouped = data.trend_chart.reduce((acc, curr) => {
       let key = curr.date;
@@ -165,20 +172,35 @@ export default function DashboardPage() {
         key = curr.date.substring(0, 7);
       }
 
-      if (!acc[key]) acc[key] = { date: key, Google: 0, Meta: 0, Total: 0, ROAS: 0, _count: 0 };
+      if (!acc[key]) acc[key] = { date: key, Google: 0, Meta: 0, Total: 0, Shopline_Rev: 0 };
       acc[key].Google += (curr.Google || 0);
       acc[key].Meta += (curr.Meta || 0);
       acc[key].Total += (curr.Total || 0);
-      acc[key].ROAS += (curr.ROAS || 0);
-      acc[key]._count += 1;
+      
+      // 🌟 數學精度優化：先還原每日真實營收並加總，避免直接平均 ROAS 造成的數學偏誤
+      const dailyActualRev = curr.Shopline_Rev || (curr.ROAS && curr.Total ? curr.ROAS * curr.Total : 0);
+      acc[key].Shopline_Rev += dailyActualRev;
+      
       return acc;
     }, {} as Record<string, any>);
 
     return Object.values(grouped).map((item: any) => ({
       ...item,
-      ROAS: item._count ? Number((item.ROAS / item._count).toFixed(2)) : 0
+      // 🌟 數學精度優化：最後使用 (總營收 / 總花費) 來計算群組的精準 ROAS
+      ROAS: item.Total > 0 ? Number((item.Shopline_Rev / item.Total).toFixed(2)) : 0
     })).sort((a, b) => a.date.localeCompare(b.date));
   }, [data?.trend_chart, timeGrouping]);
+
+  // 🌟 動態計算頂部卡片的總營收與區間 ROAS
+  const intervalRevenue = useMemo(() => {
+    return groupedTrendData.reduce((sum, item) => sum + (item.Shopline_Rev || 0), 0);
+  }, [groupedTrendData]);
+
+  const intervalSpend = useMemo(() => {
+    return groupedTrendData.reduce((sum, item) => sum + (item.Total || 0), 0);
+  }, [groupedTrendData]);
+
+  const intervalRoas = intervalSpend > 0 ? (intervalRevenue / intervalSpend).toFixed(2) : "0.00";
 
   const handleLegendClick = (e: any) => {
     const { dataKey } = e;
@@ -298,7 +320,13 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* 🌟 擴充：頂部五格指標 (新增總營收) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <h3 className="text-sm font-medium text-gray-500 mb-1">總營收 (區間)</h3>
+            <p className="text-3xl font-bold text-purple-600">{formatCurr(intervalRevenue, curr)}</p>
+            <p className="text-sm mt-2 font-medium text-purple-500">綜合 ROAS: {intervalRoas}x</p>
+          </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-500 mb-1">廣告總花費</h3>
             <p className="text-3xl font-bold text-gray-800">{formatCurr(data?.metrics?.MTD_spend, curr)}</p>
@@ -363,6 +391,8 @@ export default function DashboardPage() {
                   wrapperStyle={{ paddingTop: '20px', cursor: 'pointer', userSelect: 'none' }} 
                 />
                 
+                {/* 🌟 擴充：加入 Shopline 總營收的紫線 */}
+                <Line hide={!activeLines.Revenue} yAxisId="left" type="monotone" dataKey="Shopline_Rev" name="總營收" stroke="#8b5cf6" strokeWidth={3} dot={false} />
                 <Line hide={!activeLines.Google} yAxisId="left" type="monotone" dataKey="Google" name="Google 花費" stroke="#4285F4" strokeWidth={2} strokeDasharray="3 3" dot={false} />
                 <Line hide={!activeLines.Meta} yAxisId="left" type="monotone" dataKey="Meta" name="Meta 花費" stroke="#1877F2" strokeWidth={2} strokeDasharray="3 3" dot={false} />
                 <Line hide={!activeLines.ROAS} yAxisId="right" type="monotone" dataKey="ROAS" name="綜合 ROAS" stroke="#ff7300" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />

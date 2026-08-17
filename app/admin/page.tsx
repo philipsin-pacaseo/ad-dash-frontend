@@ -26,6 +26,10 @@ export default function AdminPage() {
   const [gscUrl, setGscUrl] = useState("");
   const [metaId, setMetaId] = useState("");
 
+  // 🌟 V9 新增：Shopline 拖曳上傳狀態
+  const [shoplineFile, setShoplineFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
   // 6. 歷史數據抓取區間
   const [fetchStartDate, setFetchStartDate] = useState("");
   const [fetchEndDate, setFetchEndDate] = useState("");
@@ -152,6 +156,7 @@ export default function AdminPage() {
 
     // 清空現有欄位與狀態
     setGoogleAdsId(""); setGa4Id(""); setGscUrl(""); setMetaId("");
+    setShoplineFile(null); // 切換商戶時清空已選的檔案
     setCoverageData(null);
 
     if (!tId || !secret) return;
@@ -235,6 +240,62 @@ export default function AdminPage() {
   };
 
   // ==========================================
+  // 🌟 核心功能：Shopline 拖曳上傳與 API 呼叫
+  // ==========================================
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+  
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+  
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      if (file.name.toLowerCase().endsWith('.csv')) {
+        setShoplineFile(file);
+      } else {
+        alert("基於系統設定，目前只支援 .csv 格式檔案");
+      }
+    }
+  };
+
+  const handleShoplineUpload = async () => {
+    if (!bindTenantId) return alert("請先選擇目標商戶");
+    if (!shoplineFile) return alert("請先選擇或拖曳 CSV 檔案");
+    if (!secret) return alert("請先輸入超級管理員密鑰");
+
+    setLoading(true); setMessage(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", shoplineFile);
+
+      const res = await fetch(`${BACKEND_URL}/api/data/upload-shopline?tenant_id=${encodeURIComponent(bindTenantId)}&secret=${encodeURIComponent(secret)}`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      
+      if (!res.ok) throw new Error(data.detail || "Shopline 檔案上傳失敗");
+      
+      setMessage({ text: data.message, type: "success" });
+      setShoplineFile(null); // 上傳成功後清空檔案狀態
+      
+      // 成功後重新刷新 Coverage 狀態
+      handleTenantChange({ target: { value: bindTenantId } } as any);
+    } catch (err: any) {
+      setMessage({ text: err.message, type: "error" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ==========================================
   // 🌟 核心功能：系統全域設定 (AI 模型動態切換)
   // ==========================================
   const fetchCurrentAiModel = async () => {
@@ -290,7 +351,7 @@ export default function AdminPage() {
         
         {info?.status === 'error' && (
           <div className="text-red-600 font-medium break-words mt-1">
-            ❌ 抓取異常：{info?.error}
+            ❌ 抓取/匯入異常：{info?.error}
           </div>
         )}
         
@@ -306,7 +367,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-100 p-8 pb-20">
       <div className="max-w-5xl mx-auto space-y-6">
-        <h1 className="text-3xl font-bold text-gray-800">超級管理員控制台 (V8.6.2 國際完整版)</h1>
+        <h1 className="text-3xl font-bold text-gray-800">超級管理員控制台 (V9.1 變現對接版)</h1>
 
         {/* 密鑰與系統操作區 */}
         <div className="bg-white p-6 rounded-lg shadow border-t-4 border-gray-800 sticky top-4 z-10 flex flex-col md:flex-row gap-4 items-end">
@@ -433,6 +494,46 @@ export default function AdminPage() {
                     </div>
                     {renderCoverageStatus('meta_ads')}
                   </div>
+
+                  {/* 🌟 V9 新增：Shopline 拖曳上傳區塊 */}
+                  <div className="p-4 border border-blue-200 rounded-md bg-white mt-4 shadow-sm relative">
+                    <label className="block text-sm font-bold text-blue-800 mb-2 flex items-center gap-2">
+                      🛍️ 步驟 E：Shopline 變現數據匯入
+                    </label>
+                    <div 
+                      className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${isDragging ? 'border-blue-500 bg-blue-50 scale-[1.02]' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'}`}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                    >
+                      {shoplineFile ? (
+                        <div className="space-y-3 animate-fade-in">
+                          <div className="text-sm font-medium text-emerald-600 bg-emerald-50 py-2 px-4 rounded inline-block">
+                            📄 準備匯入：{shoplineFile.name}
+                          </div>
+                          <div className="flex gap-2 justify-center mt-2">
+                            <button onClick={() => setShoplineFile(null)} disabled={loading} className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded hover:bg-gray-300 transition">重新選擇</button>
+                            <button onClick={handleShoplineUpload} disabled={loading || !bindTenantId} className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 disabled:opacity-50 shadow transition">🚀 立即上傳與運算</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 py-2">
+                          <div className="text-gray-500 text-sm">拖曳 Shopline 月度報表 (.csv) 至此處，或</div>
+                          <label className="cursor-pointer text-blue-600 hover:text-blue-800 text-sm font-bold underline decoration-blue-200 underline-offset-4">
+                            點擊瀏覽本機檔案
+                            <input type="file" accept=".csv" className="hidden" onChange={(e) => {
+                              if (e.target.files && e.target.files.length > 0) setShoplineFile(e.target.files[0]);
+                            }} />
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                    {/* 覆蓋率狀態標籤 */}
+                    <div className="mt-2">
+                      {renderCoverageStatus('shopline')}
+                    </div>
+                  </div>
+
                 </div>
               </div>
             </div>
