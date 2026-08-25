@@ -24,3 +24,17 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* DatePicker 灰色熱圖高亮樣式 */
+.react-datepicker__day--highlighted {
+  background-color: #e5e7eb !important; 
+  color: #374151 !important; 
+  border-radius: 0.375rem;
+  font-weight: bold;
+}
+.react-datepicker__day--highlighted:hover {
+  background-color: #d1d5db !important; 
+}
+.react-datepicker-wrapper {
+  width: 100%;
+}

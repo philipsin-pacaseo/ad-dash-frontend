@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 export default function AdminPage() {
   // 1. 全域密鑰
@@ -11,7 +13,7 @@ export default function AdminPage() {
   const [contactEmail, setContactEmail] = useState("");
   const [initialPassword, setInitialPassword] = useState("");
 
-  // 3. 多用戶狀態 (已修復加回)
+  // 3. 多用戶狀態
   const [targetTenantForUser, setTargetTenantForUser] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -19,28 +21,34 @@ export default function AdminPage() {
   // 4. 平台整合 OAuth 授權狀態
   const [tenantIdForAuth, setTenantIdForAuth] = useState("");
 
-  // 5. 子帳戶綁定與抓取狀態 (已修復加回)
+  // 5. 子帳戶綁定與抓取狀態
   const [bindTenantId, setBindTenantId] = useState("");
   const [googleAdsId, setGoogleAdsId] = useState("");
   const [ga4Id, setGa4Id] = useState("");
   const [gscUrl, setGscUrl] = useState("");
   const [metaId, setMetaId] = useState("");
 
-  // 🌟 V9 新增：Shopline 拖曳上傳狀態
+  // 🌟 V10.6 擴充：個別平台的專屬日期區間狀態 [Start Date, End Date]
+  const [googleDateRange, setGoogleDateRange] = useState<[Date | null, Date | null]>([null, null]);
+  const [metaDateRange, setMetaDateRange] = useState<[Date | null, Date | null]>([null, null]);
+  const [ga4DateRange, setGa4DateRange] = useState<[Date | null, Date | null]>([null, null]);
+  const [gscDateRange, setGscDateRange] = useState<[Date | null, Date | null]>([null, null]);
+
+  // V9 新增：Shopline 拖曳上傳狀態
   const [shoplineFile, setShoplineFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  // 6. 歷史數據抓取區間
+  // 全域歷史數據抓取區間 (保留作為 Fallback)
   const [fetchStartDate, setFetchStartDate] = useState("");
   const [fetchEndDate, setFetchEndDate] = useState("");
 
-  // 🌟 V8 升級：數據覆蓋率與健康度狀態 (已修復加回)
+  // V8 升級：數據覆蓋率與健康度狀態
   const [coverageData, setCoverageData] = useState<any>(null);
 
   // 上帝視角：商戶列表狀態
   const [tenants, setTenants] = useState<any[]>([]);
 
-  // 🌟 V8.5 新增：AI 引擎動態設定狀態
+  // V8.5 新增：AI 引擎動態設定狀態
   const [aiModel, setAiModel] = useState("");
 
   // 全局 UI 狀態
@@ -50,7 +58,25 @@ export default function AdminPage() {
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
   // ==========================================
-  // 核心功能：資料庫同步 (V8)
+  // 輔助函數：日期格式化與熱圖萃取
+  // ==========================================
+  const formatDateForApi = (d: Date | null) => {
+    if (!d) return undefined;
+    // 考慮時區問題，精準提取 YYYY-MM-DD
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  };
+
+  const getHighlightDates = (platformKey: string): Date[] => {
+    if (!coverageData || !coverageData[platformKey] || !coverageData[platformKey].fetched_dates) return [];
+    // 將後端傳來的 YYYY-MM-DD 轉為 Date 物件陣列供套件渲染灰色背景
+    return coverageData[platformKey].fetched_dates.map((dStr: string) => {
+      const [y, m, d] = dStr.split('-');
+      return new Date(Number(y), Number(m) - 1, Number(d));
+    });
+  };
+
+  // ==========================================
+  // 核心功能：資料庫同步
   // ==========================================
   const handleSyncDB = async () => {
     if (!secret) return alert("請先輸入超級管理員密鑰");
@@ -86,7 +112,7 @@ export default function AdminPage() {
   };
 
   // ==========================================
-  // 核心功能：為現有商戶新增子帳號 (已修復加回)
+  // 核心功能：為現有商戶新增子帳號
   // ==========================================
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,7 +158,6 @@ export default function AdminPage() {
     window.open("/dashboard", "_blank");
   };
 
-  // 🌟 新增：更新商戶貨幣
   const handleUpdateCurrency = async (tenantId: string, newCurrency: string) => {
     if (!secret) return;
     setLoading(true); setMessage(null);
@@ -141,13 +166,13 @@ export default function AdminPage() {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currency: newCurrency })
       });
       if (!res.ok) throw new Error("更新幣別失敗");
-      fetchAllTenants(); // 重新讀取清單
+      fetchAllTenants(); 
       setMessage({ text: `幣別已成功變更為 ${newCurrency}`, type: "success" });
     } catch (err: any) { setMessage({ text: err.message, type: "error" }); } finally { setLoading(false); }
   };
 
   // ==========================================
-  // 🌟 核心功能：商戶下拉選單連動 (加入 Coverage 掃描)
+  // 核心功能：商戶下拉選單連動 (加入 Coverage 掃描)
   // ==========================================
   const handleTenantChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const tId = e.target.value;
@@ -156,14 +181,19 @@ export default function AdminPage() {
 
     // 清空現有欄位與狀態
     setGoogleAdsId(""); setGa4Id(""); setGscUrl(""); setMetaId("");
-    setShoplineFile(null); // 切換商戶時清空已選的檔案
+    setShoplineFile(null); 
     setCoverageData(null);
+    
+    // 清空個別平台的 Date Picker 狀態
+    setGoogleDateRange([null, null]);
+    setMetaDateRange([null, null]);
+    setGa4DateRange([null, null]);
+    setGscDateRange([null, null]);
 
     if (!tId || !secret) return;
 
     setLoading(true);
     try {
-      // 1. 獲取已綁定帳號
       const resInt = await fetch(`${BACKEND_URL}/api/admin/integrations/${tId}?secret=${encodeURIComponent(secret)}`);
       if (resInt.ok) {
         const dataInt = await resInt.json();
@@ -175,7 +205,6 @@ export default function AdminPage() {
         }
       }
 
-      // 2. 🌟 掃描數據覆蓋率與健康度狀態
       const resCov = await fetch(`${BACKEND_URL}/api/admin/data-coverage/${tId}?secret=${encodeURIComponent(secret)}`);
       if (resCov.ok) {
         const dataCov = await resCov.json();
@@ -201,9 +230,9 @@ export default function AdminPage() {
   };
 
   // ==========================================
-  // 核心功能：綁定與歷史數據抓取
+  // 🌟 核心功能：綁定與歷史數據抓取 (支援個別時間與全域 Fallback)
   // ==========================================
-  const handleBindAndFetch = async (platform: string, paramName: string, paramValue: string) => {
+  const handleBindAndFetch = async (platform: string, paramName: string, paramValue: string, customStart?: string, customEnd?: string) => {
     if (!bindTenantId) return alert("請先選擇目標商戶");
     if (!paramValue) return alert(`請輸入對應的 ${paramName}`);
     setLoading(true); setMessage(null);
@@ -218,21 +247,24 @@ export default function AdminPage() {
 
       let endpoint = `${BACKEND_URL}/api/data/fetch-${platform}?tenant_id=${encodeURIComponent(bindTenantId)}&${paramName}=${encodeURIComponent(formattedValue)}`;
       
-      if (fetchStartDate) endpoint += `&start_date=${fetchStartDate}`;
-      if (fetchEndDate) endpoint += `&end_date=${fetchEndDate}`;
+      // 🌟 優先使用該平台的專屬時間選擇器，若無則降級使用全域設定
+      const finalStart = customStart || fetchStartDate;
+      const finalEnd = customEnd || fetchEndDate;
+
+      if (finalStart) endpoint += `&start_date=${finalStart}`;
+      if (finalEnd) endpoint += `&end_date=${finalEnd}`;
       
       const res = await fetch(endpoint, { method: "POST" });
       const data = await res.json();
       
       if (!res.ok) throw new Error(data.detail || `${platform} 綁定/抓取失敗`);
-      setMessage({ text: `[${platform}] 抓取任務完成！${data.message}`, type: "success" });
+      setMessage({ text: `[${platform}] 抓取任務完成！${data.message || ""}`, type: "success" });
       
-      // 成功後重新刷新 Coverage 狀態
+      // 成功後重新刷新 Coverage 狀態以更新灰色熱圖
       handleTenantChange({ target: { value: bindTenantId } } as any);
       
     } catch (err: any) {
       setMessage({ text: err.message, type: "error" });
-      // 失敗後也重新刷新 Coverage 狀態 (顯示錯誤)
       handleTenantChange({ target: { value: bindTenantId } } as any);
     } finally {
       setLoading(false);
@@ -240,7 +272,7 @@ export default function AdminPage() {
   };
 
   // ==========================================
-  // 🌟 核心功能：Shopline 拖曳上傳與 API 呼叫
+  // 核心功能：Shopline 拖曳上傳與 API 呼叫
   // ==========================================
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -284,9 +316,7 @@ export default function AdminPage() {
       if (!res.ok) throw new Error(data.detail || "Shopline 檔案上傳失敗");
       
       setMessage({ text: data.message, type: "success" });
-      setShoplineFile(null); // 上傳成功後清空檔案狀態
-      
-      // 成功後重新刷新 Coverage 狀態
+      setShoplineFile(null); 
       handleTenantChange({ target: { value: bindTenantId } } as any);
     } catch (err: any) {
       setMessage({ text: err.message, type: "error" });
@@ -296,7 +326,7 @@ export default function AdminPage() {
   };
 
   // ==========================================
-  // 🌟 核心功能：系統全域設定 (AI 模型動態切換)
+  // 核心功能：系統全域設定 (AI 模型動態切換)
   // ==========================================
   const fetchCurrentAiModel = async () => {
     if (!secret) return alert("請先輸入超級管理員密鑰");
@@ -334,7 +364,7 @@ export default function AdminPage() {
     }
   };
 
-  // 🌟 輔助函數：渲染健康度標籤 (已修復加回)
+  // 輔助函數：渲染健康度標籤
   const renderCoverageStatus = (platformKey: string) => {
     if (!coverageData || !coverageData[platformKey]) return null;
     const { min, max, info } = coverageData[platformKey];
@@ -343,7 +373,7 @@ export default function AdminPage() {
       <div className="mt-2 text-xs p-2 bg-gray-50 rounded border border-gray-100 space-y-1">
         <div className="flex items-center gap-2">
           {min && max ? (
-            <span className="text-emerald-600 font-bold bg-emerald-100 px-2 py-0.5 rounded">✅ 已入庫：{min} ~ {max}</span>
+            <span className="text-emerald-600 font-bold bg-emerald-100 px-2 py-0.5 rounded">✅ 範圍：{min} ~ {max}</span>
           ) : (
             <span className="text-gray-500 font-medium bg-gray-200 px-2 py-0.5 rounded">⚪ 尚未擁有歷史數據</span>
           )}
@@ -357,7 +387,7 @@ export default function AdminPage() {
         
         {info?.status === 'success' && info?.last_sync && (
           <div className="text-blue-600 font-medium mt-1">
-            🔄 最後成功同步：{new Date(info.last_sync).toLocaleString()}
+            🔄 最後成功：{new Date(info.last_sync).toLocaleString()}
           </div>
         )}
       </div>
@@ -367,7 +397,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-100 p-8 pb-20">
       <div className="max-w-5xl mx-auto space-y-6">
-        <h1 className="text-3xl font-bold text-gray-800">超級管理員控制台 (V9.1 變現對接版)</h1>
+        <h1 className="text-3xl font-bold text-gray-800">超級管理員控制台 (V10.7 樣式分離版)</h1>
 
         {/* 密鑰與系統操作區 */}
         <div className="bg-white p-6 rounded-lg shadow border-t-4 border-gray-800 sticky top-4 z-10 flex flex-col md:flex-row gap-4 items-end">
@@ -392,7 +422,7 @@ export default function AdminPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 左欄：商戶與使用者管理 (已完全還原) */}
+          {/* 左欄：商戶與使用者管理 */}
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
               <h2 className="text-xl font-semibold mb-4">1. 建立新商戶 (New Tenant)</h2>
@@ -422,10 +452,10 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* 右欄：授權與歷史數據抓取 (已完全還原) */}
+          {/* 右欄：授權與獨立歷史數據抓取 */}
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow border-l-4 border-emerald-500">
-              <h2 className="text-xl font-semibold mb-4">3 & 4. 平台授權與歷史數據回溯</h2>
+              <h2 className="text-xl font-semibold mb-4">3 & 4. 平台授權與獨立數據回溯</h2>
               
               <label className="block text-sm font-bold text-gray-700 mb-2">步驟 A：選擇目標商戶</label>
               <select
@@ -449,7 +479,8 @@ export default function AdminPage() {
               
               <div className="pt-4 border-t border-gray-100">
                 <div className="mb-4 p-3 bg-yellow-50 rounded border border-yellow-200">
-                  <label className="block text-sm font-bold text-gray-700 mb-2">步驟 C：設定抓取區間 (留空則預設抓取昨日)</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">全域預設抓取區間 (Global Fallback)</label>
+                  <p className="text-xs text-gray-500 mb-2">若下方獨立平台未選擇日期，將預設使用此區間 (留空則抓取昨日)。</p>
                   <div className="flex gap-2 items-center">
                     <input type="date" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm bg-white" value={fetchStartDate} onChange={(e) => setFetchStartDate(e.target.value)} />
                     <span className="text-gray-500">~</span>
@@ -457,48 +488,117 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <label className="block text-sm font-bold text-gray-700 mb-2">步驟 D：輸入子帳號 ID 並執行抓取</label>
+                <label className="block text-sm font-bold text-gray-700 mb-2">步驟 C：各平台獨立抓取 (灰色為已抓取日期)</label>
                 <div className="space-y-4">
-                  {/* Google Ads */}
-                  <div className="p-3 border border-gray-200 rounded-md bg-white">
-                    <div className="flex gap-2">
-                      <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="Google Ads Customer ID" value={googleAdsId} onChange={(e) => setGoogleAdsId(e.target.value)} disabled={!bindTenantId} />
-                      <button onClick={() => handleBindAndFetch('google-ads', 'google_customer_id', googleAdsId)} disabled={!bindTenantId || loading} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">抓取</button>
+                  
+                  {/* Google Ads 獨立卡片 */}
+                  <div className="p-4 border border-gray-200 rounded-md bg-white space-y-3 shadow-sm hover:border-gray-300 transition">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-bold text-gray-800 text-sm">🔵 Google Ads 資料同步區</h3>
+                    </div>
+                    <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="Google Ads Customer ID" value={googleAdsId} onChange={(e) => setGoogleAdsId(e.target.value)} disabled={!bindTenantId} />
+                    <div className="flex gap-2 flex-col sm:flex-row">
+                      <div className="flex-1">
+                        <DatePicker
+                          selectsRange={true}
+                          startDate={googleDateRange[0]}
+                          endDate={googleDateRange[1]}
+                          onChange={(update: [Date | null, Date | null]) => setGoogleDateRange(update)}
+                          highlightDates={getHighlightDates('google_ads')}
+                          placeholderText="選擇專屬區間 (灰色為已入庫)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white cursor-pointer"
+                          dateFormat="yyyy-MM-dd"
+                          isClearable
+                          disabled={!bindTenantId}
+                        />
+                      </div>
+                      <button onClick={() => handleBindAndFetch('google-ads', 'google_customer_id', googleAdsId, formatDateForApi(googleDateRange[0]), formatDateForApi(googleDateRange[1]))} disabled={!bindTenantId || loading} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50 whitespace-nowrap">抓取數據</button>
                     </div>
                     {renderCoverageStatus('google_ads')}
                   </div>
 
-                  {/* GA4 */}
-                  <div className="p-3 border border-gray-200 rounded-md bg-white">
-                    <div className="flex gap-2">
-                      <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="GA4 Property ID" value={ga4Id} onChange={(e) => setGa4Id(e.target.value)} disabled={!bindTenantId} />
-                      <button onClick={() => handleBindAndFetch('ga4', 'ga4_property_id', ga4Id)} disabled={!bindTenantId || loading} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">抓取</button>
+                  {/* Meta Ads 獨立卡片 */}
+                  <div className="p-4 border border-gray-200 rounded-md bg-white space-y-3 shadow-sm hover:border-gray-300 transition">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-bold text-gray-800 text-sm">🔷 Meta Ads 資料同步區</h3>
                     </div>
-                    {renderCoverageStatus('ga4')}
-                  </div>
-
-                  {/* GSC */}
-                  <div className="p-3 border border-gray-200 rounded-md bg-white">
-                    <div className="flex gap-2">
-                      <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="GSC 網域 (例如: outdooride.com)" value={gscUrl} onChange={(e) => setGscUrl(e.target.value)} disabled={!bindTenantId} />
-                      <button onClick={() => handleBindAndFetch('gsc', 'gsc_site_url', gscUrl)} disabled={!bindTenantId || loading} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">抓取</button>
-                    </div>
-                    {renderCoverageStatus('gsc')}
-                  </div>
-
-                  {/* Meta Ads */}
-                  <div className="p-3 border border-gray-200 rounded-md bg-white">
-                    <div className="flex gap-2">
-                      <input type="text" className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="Meta Ad Account ID" value={metaId} onChange={(e) => setMetaId(e.target.value)} disabled={!bindTenantId} />
-                      <button onClick={() => handleBindAndFetch('meta-ads', 'meta_ad_account_id', metaId)} disabled={!bindTenantId || loading} className="px-4 py-2 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 disabled:opacity-50">抓取</button>
+                    <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="Meta Ad Account ID" value={metaId} onChange={(e) => setMetaId(e.target.value)} disabled={!bindTenantId} />
+                    <div className="flex gap-2 flex-col sm:flex-row">
+                      <div className="flex-1">
+                        <DatePicker
+                          selectsRange={true}
+                          startDate={metaDateRange[0]}
+                          endDate={metaDateRange[1]}
+                          onChange={(update: [Date | null, Date | null]) => setMetaDateRange(update)}
+                          highlightDates={getHighlightDates('meta_ads')}
+                          placeholderText="選擇專屬區間 (灰色為已入庫)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white cursor-pointer"
+                          dateFormat="yyyy-MM-dd"
+                          isClearable
+                          disabled={!bindTenantId}
+                        />
+                      </div>
+                      <button onClick={() => handleBindAndFetch('meta-ads', 'meta_ad_account_id', metaId, formatDateForApi(metaDateRange[0]), formatDateForApi(metaDateRange[1]))} disabled={!bindTenantId || loading} className="px-4 py-2 bg-[#1877F2] text-white rounded text-sm hover:bg-[#166FE5] disabled:opacity-50 whitespace-nowrap">抓取數據</button>
                     </div>
                     {renderCoverageStatus('meta_ads')}
                   </div>
 
-                  {/* 🌟 V9 新增：Shopline 拖曳上傳區塊 */}
+                  {/* GA4 獨立卡片 */}
+                  <div className="p-4 border border-gray-200 rounded-md bg-white space-y-3 shadow-sm hover:border-gray-300 transition">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-bold text-gray-800 text-sm">🟠 GA4 流量資料同步區</h3>
+                    </div>
+                    <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="GA4 Property ID" value={ga4Id} onChange={(e) => setGa4Id(e.target.value)} disabled={!bindTenantId} />
+                    <div className="flex gap-2 flex-col sm:flex-row">
+                      <div className="flex-1">
+                        <DatePicker
+                          selectsRange={true}
+                          startDate={ga4DateRange[0]}
+                          endDate={ga4DateRange[1]}
+                          onChange={(update: [Date | null, Date | null]) => setGa4DateRange(update)}
+                          highlightDates={getHighlightDates('ga4')}
+                          placeholderText="選擇專屬區間 (灰色為已入庫)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white cursor-pointer"
+                          dateFormat="yyyy-MM-dd"
+                          isClearable
+                          disabled={!bindTenantId}
+                        />
+                      </div>
+                      <button onClick={() => handleBindAndFetch('ga4', 'ga4_property_id', ga4Id, formatDateForApi(ga4DateRange[0]), formatDateForApi(ga4DateRange[1]))} disabled={!bindTenantId || loading} className="px-4 py-2 bg-orange-500 text-white rounded text-sm hover:bg-orange-600 disabled:opacity-50 whitespace-nowrap">抓取數據</button>
+                    </div>
+                    {renderCoverageStatus('ga4')}
+                  </div>
+
+                  {/* GSC 獨立卡片 */}
+                  <div className="p-4 border border-gray-200 rounded-md bg-white space-y-3 shadow-sm hover:border-gray-300 transition">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-bold text-gray-800 text-sm">🟢 GSC 搜尋資料同步區</h3>
+                    </div>
+                    <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded text-sm bg-gray-50" placeholder="GSC 網域 (例如: outdooride.com)" value={gscUrl} onChange={(e) => setGscUrl(e.target.value)} disabled={!bindTenantId} />
+                    <div className="flex gap-2 flex-col sm:flex-row">
+                      <div className="flex-1">
+                        <DatePicker
+                          selectsRange={true}
+                          startDate={gscDateRange[0]}
+                          endDate={gscDateRange[1]}
+                          onChange={(update: [Date | null, Date | null]) => setGscDateRange(update)}
+                          highlightDates={getHighlightDates('gsc')}
+                          placeholderText="選擇專屬區間 (灰色為已入庫)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white cursor-pointer"
+                          dateFormat="yyyy-MM-dd"
+                          isClearable
+                          disabled={!bindTenantId}
+                        />
+                      </div>
+                      <button onClick={() => handleBindAndFetch('gsc', 'gsc_site_url', gscUrl, formatDateForApi(gscDateRange[0]), formatDateForApi(gscDateRange[1]))} disabled={!bindTenantId || loading} className="px-4 py-2 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700 disabled:opacity-50 whitespace-nowrap">抓取數據</button>
+                    </div>
+                    {renderCoverageStatus('gsc')}
+                  </div>
+
+                  {/* Shopline 拖曳上傳區塊 */}
                   <div className="p-4 border border-blue-200 rounded-md bg-white mt-4 shadow-sm relative">
                     <label className="block text-sm font-bold text-blue-800 mb-2 flex items-center gap-2">
-                      🛍️ 步驟 E：Shopline 變現數據匯入
+                      🛍️ 步驟 D：Shopline 變現數據匯入
                     </label>
                     <div 
                       className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${isDragging ? 'border-blue-500 bg-blue-50 scale-[1.02]' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'}`}
@@ -528,7 +628,6 @@ export default function AdminPage() {
                         </div>
                       )}
                     </div>
-                    {/* 覆蓋率狀態標籤 */}
                     <div className="mt-2">
                       {renderCoverageStatus('shopline')}
                     </div>
@@ -540,9 +639,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* ========================================== */}
-        {/* 🌟 區塊 5：上帝視角 (商戶列表與貨幣設定) (保留 V8.6 最新功能) */}
-        {/* ========================================== */}
+        {/* 區塊 5：上帝視角 (商戶列表與貨幣設定) */}
         <div className="bg-white p-6 rounded-lg shadow border-t-4 border-purple-500 mt-8">
           <div className="flex justify-between items-center mb-6">
             <div>
@@ -602,9 +699,7 @@ export default function AdminPage() {
           )}
         </div>
 
-        {/* ========================================== */}
-        {/* 🌟 區塊 6：系統全域設定 (AI 模型動態切換) (保留 V8.6 最新功能) */}
-        {/* ========================================== */}
+        {/* 區塊 6：系統全域設定 (AI 模型動態切換) */}
         <div className="bg-white p-6 rounded-lg shadow border-t-4 border-yellow-500 mt-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-800">6. ⚙️ 系統全域設定 (AI 引擎切換)</h2>
